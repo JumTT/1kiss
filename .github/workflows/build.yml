@@ -48,8 +48,7 @@ jobs:
 
       - name: Build
         shell: pwsh
-        run: |
-          & "$env:GITHUB_WORKSPACE/build.ps1" -p linux -a $env:BUILD_ARCH -libs '${{ github.event.inputs.libs }}'
+        run: ./build.ps1 -p linux -a $env:BUILD_ARCH -libs '${{ github.event.inputs.libs }}'
 
       - name: Upload
         uses: actions/upload-artifact@v6
@@ -70,8 +69,7 @@ jobs:
 
       - name: Build
         shell: pwsh
-        run: |
-          & "$env:GITHUB_WORKSPACE/build.ps1" -p linux -a $env:BUILD_ARCH -libs '${{ github.event.inputs.libs }}'
+        run: ./build.ps1 -p linux -a $env:BUILD_ARCH -libs '${{ github.event.inputs.libs }}'
 
       - name: Upload
         uses: actions/upload-artifact@v6
@@ -98,8 +96,7 @@ jobs:
 
       - name: Build
         shell: pwsh
-        run: |
-          & "$env:GITHUB_WORKSPACE/build.ps1" -p osx -a $env:BUILD_ARCH -libs '${{ github.event.inputs.libs }}'
+        run: ./build.ps1 -p osx -a $env:BUILD_ARCH -libs '${{ github.event.inputs.libs }}'
 
       - name: Upload
         uses: actions/upload-artifact@v6
@@ -126,8 +123,7 @@ jobs:
 
       - name: Build
         shell: pwsh
-        run: |
-          & "$env:GITHUB_WORKSPACE/build.ps1" -p osx -a $env:BUILD_ARCH -libs '${{ github.event.inputs.libs }}'
+        run: ./build.ps1 -p osx -a $env:BUILD_ARCH -libs '${{ github.event.inputs.libs }}'
 
       - name: Upload
         uses: actions/upload-artifact@v6
@@ -166,8 +162,7 @@ jobs:
 
       - name: Build
         shell: pwsh
-        run: |
-          & "$env:GITHUB_WORKSPACE/build.ps1" -p ios -a $env:BUILD_ARCH -libs '${{ github.event.inputs.libs }}'
+        run: ./build.ps1 -p ios -a $env:BUILD_ARCH -libs '${{ github.event.inputs.libs }}'
 
       - name: Upload
         uses: actions/upload-artifact@v6
@@ -192,8 +187,7 @@ jobs:
           python-version: '3.10'
       - name: Build
         shell: pwsh
-        run: |
-          & "$env:GITHUB_WORKSPACE/build.ps1" -p ios -a arm64 -sdk simulator -libs '${{ github.event.inputs.libs }}'
+        run: ./build.ps1 -p ios -a arm64 -sdk simulator -libs '${{ github.event.inputs.libs }}'
       - name: Upload
         uses: actions/upload-artifact@v6
         with:
@@ -231,8 +225,7 @@ jobs:
 
       - name: Build
         shell: pwsh
-        run: |
-          & "$env:GITHUB_WORKSPACE/build.ps1" -p tvos -a $env:BUILD_ARCH -libs '${{ github.event.inputs.libs }}'
+        run: ./build.ps1 -p tvos -a $env:BUILD_ARCH -libs '${{ github.event.inputs.libs }}'
 
       - name: Upload
         uses: actions/upload-artifact@v6
@@ -257,8 +250,7 @@ jobs:
           python-version: '3.10'
       - name: Build
         shell: pwsh
-        run: |
-          & "$env:GITHUB_WORKSPACE/build.ps1" -p tvos -a arm64 -sdk simulator -libs '${{ github.event.inputs.libs }}'
+        run: ./build.ps1 -p tvos -a arm64 -sdk simulator -libs '${{ github.event.inputs.libs }}'
       - name: Upload
         uses: actions/upload-artifact@v6
         with:
@@ -286,13 +278,11 @@ jobs:
 
       - name: Setup NDK
         shell: pwsh
-        run: |
-          & "$env:GITHUB_WORKSPACE/1k/1kiss.ps1" -p android -a $env:BUILD_ARCH -setupOnly -ndkOnly
+        run: ./1k/1kiss.ps1 -p android -a $env:BUILD_ARCH -setupOnly -ndkOnly
 
       - name: Build
         shell: pwsh
-        run: |
-          & "$env:GITHUB_WORKSPACE/build.ps1" -p android -a $env:BUILD_ARCH -libs '${{ github.event.inputs.libs }}'
+        run: ./build.ps1 -p android -a $env:BUILD_ARCH -libs '${{ github.event.inputs.libs }}'
 
       - name: Upload
         uses: actions/upload-artifact@v6
@@ -321,8 +311,7 @@ jobs:
 
       - name: Build
         shell: pwsh
-        run: |
-          & "$env:GITHUB_WORKSPACE\build.ps1" -p win32 -a $env:BUILD_ARCH -libs '${{ github.event.inputs.libs }}'
+        run: .\build.ps1 -p win32 -a $env:BUILD_ARCH -libs '${{ github.event.inputs.libs }}'
 
       - name: Upload
         uses: actions/upload-artifact@v6
@@ -343,8 +332,7 @@ jobs:
 
       - name: Build
         shell: pwsh
-        run: |
-          & "$env:GITHUB_WORKSPACE\build.ps1" -p win32 -a arm64 -libs '${{ github.event.inputs.libs }}'
+        run: .\build.ps1 -p win32 -a arm64 -libs '${{ github.event.inputs.libs }}'
 
       - name: Upload
         uses: actions/upload-artifact@v6
@@ -373,8 +361,7 @@ jobs:
 
       - name: Build
         shell: pwsh
-        run: |
-          & "$env:GITHUB_WORKSPACE\build.ps1" -p winrt -a $env:BUILD_ARCH -libs '${{ github.event.inputs.libs }}'
+        run: .\build.ps1 -p winrt -a $env:BUILD_ARCH -libs '${{ github.event.inputs.libs }}'
 
       - name: Upload
         uses: actions/upload-artifact@v6
@@ -391,8 +378,7 @@ jobs:
 
       - name: Build
         shell: pwsh
-        run: |
-          if ('${{ github.event.inputs.libs }}' -eq ''){ & "$env:GITHUB_WORKSPACE/build.ps1" -p wasm -a '*' -libs 'zlib,openssl,curl' } else { & "$env:GITHUB_WORKSPACE/build.ps1" -p wasm -a '*' -libs '${{ github.event.inputs.libs }}' }
+        run: if ('${{ github.event.inputs.libs }}' -eq ''){ ./build.ps1 -p wasm -a '*' -libs 'zlib,openssl,curl' } else { ./build.ps1 -p wasm -a '*' -libs '${{ github.event.inputs.libs }}' }
 
       - name: Upload
         uses: actions/upload-artifact@v6
@@ -409,8 +395,7 @@ jobs:
 
       - name: Build
         shell: pwsh
-        run: |
-          if ('${{ github.event.inputs.libs }}' -eq ''){ & "$env:GITHUB_WORKSPACE/build.ps1" -p wasm64 -a '*' -libs 'zlib,openssl,curl' } else { & "$env:GITHUB_WORKSPACE/build.ps1" -p wasm64 -a '*' -libs '${{ github.event.inputs.libs }}' }
+        run: if ('${{ github.event.inputs.libs }}' -eq ''){ ./build.ps1 -p wasm64 -a '*' -libs 'zlib,openssl,curl' } else { ./build.ps1 -p wasm64 -a '*' -libs '${{ github.event.inputs.libs }}' }
 
       - name: Upload
         uses: actions/upload-artifact@v6
