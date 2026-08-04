@@ -33,3 +33,21 @@ elseif ($content -notmatch '(?m)^\s*set\(C_CXX_WARNINGS\b') {
 else {
     Write-Host "1kiss: BoringSSL -Werror already absent, nothing to patch"
 }
+
+# BoringSSL ships a `bssl` command-line tool that its CMakeLists.txt installs via
+# `install(TARGETS bssl)`. On Apple platforms (iOS/tvOS) `bssl` is a MACOSX_BUNDLE
+# executable, and installing a bundle target without a BUNDLE DESTINATION makes
+# CMake's Xcode generator abort configuration ("install TARGETS given no BUNDLE
+# DESTINATION for MACOSX_BUNDLE executable target bssl"), so BoringSSL.xcodeproj is
+# never produced. We only consume the crypto/ssl static libs, so drop the tool's
+# install rule to keep configuration working across all platforms.
+$content = Get-Content $cmakelists -Raw
+$patched = $content -replace '(?m)^\s*install\(TARGETS bssl\)\s*\r?\n', ''
+
+if ($patched -ne $content) {
+    Set-Content -Path $cmakelists -Value $patched -NoNewline
+    Write-Host "1kiss: patched BoringSSL CMakeLists.txt to drop install(TARGETS bssl)"
+}
+else {
+    Write-Host "1kiss: BoringSSL install(TARGETS bssl) not found, nothing to patch"
+}

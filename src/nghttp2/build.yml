@@ -3,4 +3,4 @@ repo: https://github.com/nghttp2/nghttp2.git
 tag_prefix: v
 tag_dot2ul: false
 cb_tool: cmake
-options: -DENABLE_LIB_ONLY=ON -DENABLE_STATIC_LIB=ON -DENABLE_SHARED_LIB=OFF -DBUILD_TESTING=OFF
+options: -DENABLE_LIB_ONLY=ON -DENABLE_STATIC_LIB=ON -DENABLE_SHARED_LIB=OFF -DBUILD_TESTING=OFF -DENABLE_DOC=OFF

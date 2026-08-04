@@ -107,7 +107,9 @@ if ($IsWin) {
 
 if ($Global:is_android) {
     active_ndk_toolchain
-    $Global:android_api_level = @{arm64 = 21; x64 = 22; armv7 = 16; x86 = 16 }[$target_cpu]
+    # armv7 uses API 19: BoringSSL's crypto/cpu_arm_linux.cc calls getauxval(),
+    # which Bionic only declares from API 18+. x86 also bumped to 19 to match.
+    $Global:android_api_level = @{arm64 = 21; x64 = 22; armv7 = 19; x86 = 19 }[$target_cpu]
 }
 elseif ($is_darwin_family) {
     # query xcode version
@@ -231,6 +233,18 @@ Foreach ($lib_name in $libs) {
     if ($build_conf."options_$target_os") {
         $build_conf.options += (eval $build_conf."options_$target_os") -split ' '
     }
+
+    # BoringSSL on Windows/ARM64: the CMake build uses enable_language(ASM) (not
+    # NASM, which is x86-only) and then feeds the ASM target the full, un-filtered
+    # perlasm source list, including x86_64/apple .S files (e.g.
+    # aes-gcm-avx2-x86_64-apple.S). MSVC's ARM64 assembler can't build those, the
+    # .obj is never produced, and crypto.lib fails to link (LNK1181). Building the
+    # crypto primitives from portable C avoids the mis-selected assembly; we only
+    # consume the static libs, so the perf cost is acceptable.
+    if ($lib_name -eq 'boringssl' -and $is_win_family -and $target_cpu -eq 'arm64') {
+        $build_conf.options += '-DOPENSSL_NO_ASM=ON'
+    }
+
     println "Building $lib_name in $lib_src..."
     println "build_conf.options: $($build_conf.options)"
     # patch before build
