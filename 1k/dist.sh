@@ -191,10 +191,16 @@ function dist_lib {
         mkdir -p ${DIST_DIR}/lib/android/arm64-v8a
         mkdir -p ${DIST_DIR}/lib/android/x86
         mkdir -p ${DIST_DIR}/lib/android/x86_64
-        cp install_android_armv7/${LIB_NAME}/lib/*.a ${DIST_DIR}/lib/android/armeabi-v7a/
-        cp install_android_arm64/${LIB_NAME}/lib/*.a ${DIST_DIR}/lib/android/arm64-v8a/
-        cp install_android_x86/${LIB_NAME}/lib/*.a ${DIST_DIR}/lib/android/x86/
-        cp install_android_x64/${LIB_NAME}/lib/*.a ${DIST_DIR}/lib/android/x86_64/
+        # Most libs are static (*.a); nghttp2 only produces a shared lib (*.so),
+        # so copy both kinds and tolerate a missing pattern (copy1k ignores it).
+        copy1k "install_android_armv7/${LIB_NAME}/lib/*.a" ${DIST_DIR}/lib/android/armeabi-v7a/
+        copy1k "install_android_armv7/${LIB_NAME}/lib/*.so" ${DIST_DIR}/lib/android/armeabi-v7a/
+        copy1k "install_android_arm64/${LIB_NAME}/lib/*.a" ${DIST_DIR}/lib/android/arm64-v8a/
+        copy1k "install_android_arm64/${LIB_NAME}/lib/*.so" ${DIST_DIR}/lib/android/arm64-v8a/
+        copy1k "install_android_x86/${LIB_NAME}/lib/*.a" ${DIST_DIR}/lib/android/x86/
+        copy1k "install_android_x86/${LIB_NAME}/lib/*.so" ${DIST_DIR}/lib/android/x86/
+        copy1k "install_android_x64/${LIB_NAME}/lib/*.a" ${DIST_DIR}/lib/android/x86_64/
+        copy1k "install_android_x64/${LIB_NAME}/lib/*.so" ${DIST_DIR}/lib/android/x86_64/
     fi
 
     if [ $(($DIST_FLAGS & $DISTF_WASM)) != 0 ] ; then
@@ -281,7 +287,7 @@ function create_xcfraemwork {
 
 # dist libs
 if [ "$DIST_LIBS" = "" ] ; then
-    DIST_LIBS="zlib,jpeg-turbo,openssl,cares,curl,luajit,angle,opus"
+    DIST_LIBS="zlib,boringssl,nghttp3,ngtcp2,nghttp2,curl"
 fi
 
 if [ -f "$DIST_VERLIST" ] ; then
