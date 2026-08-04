@@ -1,0 +1,11 @@
+ver: 3.0.21
+repo: https://github.com/openssl/openssl/releases/download/openssl-$ver/openssl-$ver.tar.gz
+tag_prefix: openssl-
+tag_dot2ul: false
+cb_tool: custom
+options: 'no-tests'
+options_unix: no-comp no-async no-shared
+options_embed: no-dso no-engine no-hw
+options_msw: no-comp
+options_wasm: no-asm no-threads no-ssl3 no-dtls no-engine no-dso linux-x32 -static
+options_wasm64: no-asm no-threads no-ssl3 no-dtls no-engine no-dso linux-generic64 -static

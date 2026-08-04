@@ -1,0 +1,404 @@
+name: build
+
+# Controls when the action will run. 
+on:
+  # Triggers the workflow on push or pull request events
+  push:
+    paths:
+      - .github/workflows/build.yml
+      - 1k/build*
+      - 1k/ios.cmake
+      - src/**/build*
+      - src/**/install*
+      - src/**/patch*
+      - src/**/clean*
+      - src/**/rel*
+  workflow_dispatch:
+    # Inputs the workflow accepts.
+    inputs:
+      no_dll:
+        # actions run ID
+        description: 'Do not build windows lib as dll'
+        # Default value if no value is explicitly provided
+        default: ''
+        # Input has to be provided for the workflow to run
+        required: false
+      libs:
+        description: "build libs, split by ','"
+        default: ''
+        required: false
+         
+env:
+  GH_XCODE_VER: 16.4
+  VS_DEPLOYMENT_TARGET: 10.0.17763.0 # for Windows Store(UWP) Apps only
+
+# A workflow run is made up of one or more jobs that can run sequentially or in parallel
+jobs:
+  linux-x64:
+    # The type of runner that the job will run on
+    runs-on: ubuntu-22.04
+    
+    env:
+      BUILD_ARCH: x64
+
+    # Steps represent a sequence of tasks that will be executed as part of the job
+    steps:
+      # Checks-out your repository under $GITHUB_WORKSPACE, so your job can access it
+      - uses: actions/checkout@v6
+
+      - name: Build
+        shell: pwsh
+        run: ./build.ps1 -p linux -a $env:BUILD_ARCH -libs '${{ github.event.inputs.libs }}'
+
+      - name: Upload
+        uses: actions/upload-artifact@v6
+        with:
+          path: ./${{ env.install_path }}/**
+          name: ${{ env.install_path }}
+  linux-arm64:
+    # The type of runner that the job will run on
+    runs-on: ubuntu-22.04-arm
+    
+    env:
+      BUILD_ARCH: arm64
+
+    # Steps represent a sequence of tasks that will be executed as part of the job
+    steps:
+      # Checks-out your repository under $GITHUB_WORKSPACE, so your job can access it
+      - uses: actions/checkout@v6
+
+      - name: Build
+        shell: pwsh
+        run: ./build.ps1 -p linux -a $env:BUILD_ARCH -libs '${{ github.event.inputs.libs }}'
+
+      - name: Upload
+        uses: actions/upload-artifact@v6
+        with:
+          path: ./${{ env.install_path }}/**
+          name: ${{ env.install_path }}
+
+  osx-x64:
+    # The type of runner that the job will run on
+    runs-on: macos-15-intel
+    
+    env:
+      BUILD_ARCH: 'x64'
+
+    # Steps represent a sequence of tasks that will be executed as part of the job
+    steps:
+      # Checks-out your repository under $GITHUB_WORKSPACE, so your job can access it
+      - uses: actions/checkout@v6
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+
+      - name: Build
+        shell: pwsh
+        run: ./build.ps1 -p osx -a $env:BUILD_ARCH -libs '${{ github.event.inputs.libs }}'
+
+      - name: Upload
+        uses: actions/upload-artifact@v6
+        with:
+          path: ./${{ env.install_path }}/**
+          name: ${{ env.install_path }}
+
+  osx-arm64:
+    # The type of runner that the job will run on
+    runs-on: macos-latest
+    
+    env:
+      BUILD_ARCH: 'arm64'
+
+    # Steps represent a sequence of tasks that will be executed as part of the job
+    steps:
+      # Checks-out your repository under $GITHUB_WORKSPACE, so your job can access it
+      - uses: actions/checkout@v6
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+
+      - name: Build
+        shell: pwsh
+        run: ./build.ps1 -p osx -a $env:BUILD_ARCH -libs '${{ github.event.inputs.libs }}'
+
+      - name: Upload
+        uses: actions/upload-artifact@v6
+        with:
+          path: ./${{ env.install_path }}/**
+          name: ${{ env.install_path }}
+
+  ios:
+    # The type of runner that the job will run on
+    runs-on: macos-15
+    
+    strategy:
+      matrix:
+        arch:
+          - arm64
+          - x64
+    
+    env:
+      BUILD_ARCH: ${{ matrix.arch }}
+
+    # Steps represent a sequence of tasks that will be executed as part of the job
+    steps:
+      # Checks-out your repository under $GITHUB_WORKSPACE, so your job can access it
+      - uses: actions/checkout@v6
+
+      - name: Setup Xcode version
+        uses: maxim-lobanov/setup-xcode@v1
+        id: setup-xcode
+        with: 
+          xcode-version: '${{ env.GH_XCODE_VER }}'
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+
+      - name: Build
+        shell: pwsh
+        run: ./build.ps1 -p ios -a $env:BUILD_ARCH -libs '${{ github.event.inputs.libs }}'
+
+      - name: Upload
+        uses: actions/upload-artifact@v6
+        with:
+          path: ./${{ env.install_path }}/**
+          name: ${{ env.install_path }}
+  ios-arm64-sim:
+    # The type of runner that the job will run on
+    runs-on: macos-15
+    # Steps represent a sequence of tasks that will be executed as part of the job
+    steps:
+      # Checks-out your repository under $GITHUB_WORKSPACE, so your job can access it
+      - uses: actions/checkout@v6
+      - name: Setup Xcode version
+        uses: maxim-lobanov/setup-xcode@v1
+        id: setup-xcode
+        with: 
+          xcode-version: '${{ env.GH_XCODE_VER }}'
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+      - name: Build
+        shell: pwsh
+        run: ./build.ps1 -p ios -a arm64 -sdk simulator -libs '${{ github.event.inputs.libs }}'
+      - name: Upload
+        uses: actions/upload-artifact@v6
+        with:
+          path: ./${{ env.install_path }}/**
+          name: ${{ env.install_path }}
+
+  tvos:
+    # The type of runner that the job will run on
+    runs-on: macos-15
+    
+    strategy:
+      matrix:
+        arch:
+          - arm64
+          - x64
+    
+    env:
+      BUILD_ARCH: ${{ matrix.arch }}
+
+    # Steps represent a sequence of tasks that will be executed as part of the job
+    steps:
+      # Checks-out your repository under $GITHUB_WORKSPACE, so your job can access it
+      - uses: actions/checkout@v6
+
+      - name: Setup Xcode version
+        uses: maxim-lobanov/setup-xcode@v1
+        id: setup-xcode
+        with: 
+          xcode-version: '${{ env.GH_XCODE_VER }}'
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+
+      - name: Build
+        shell: pwsh
+        run: ./build.ps1 -p tvos -a $env:BUILD_ARCH -libs '${{ github.event.inputs.libs }}'
+
+      - name: Upload
+        uses: actions/upload-artifact@v6
+        with:
+          path: ./${{ env.install_path }}/**
+          name: ${{ env.install_path }}
+  tvos-arm64-sim:
+    # The type of runner that the job will run on
+    runs-on: macos-15
+    # Steps represent a sequence of tasks that will be executed as part of the job
+    steps:
+      # Checks-out your repository under $GITHUB_WORKSPACE, so your job can access it
+      - uses: actions/checkout@v6
+      - name: Setup Xcode version
+        uses: maxim-lobanov/setup-xcode@v1
+        id: setup-xcode
+        with: 
+          xcode-version: '${{ env.GH_XCODE_VER }}'
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+      - name: Build
+        shell: pwsh
+        run: ./build.ps1 -p tvos -a arm64 -sdk simulator -libs '${{ github.event.inputs.libs }}'
+      - name: Upload
+        uses: actions/upload-artifact@v6
+        with:
+          path: ./${{ env.install_path }}/**
+          name: ${{ env.install_path }}
+  android:
+    # The type of runner that the job will run on
+    runs-on: ubuntu-latest
+    
+    strategy:
+      matrix:
+        arch:
+          - armv7
+          - arm64
+          - x86
+          - x64
+    
+    env:
+      BUILD_ARCH: ${{ matrix.arch }}
+
+    # Steps represent a sequence of tasks that will be executed as part of the job
+    steps:
+      # Checks-out your repository under $GITHUB_WORKSPACE, so your job can access it
+      - uses: actions/checkout@v6
+
+      - name: Setup NDK
+        shell: pwsh
+        run: ./1k/1kiss.ps1 -p android -a $env:BUILD_ARCH -setupOnly -ndkOnly
+
+      - name: Build
+        shell: pwsh
+        run: ./build.ps1 -p android -a $env:BUILD_ARCH -libs '${{ github.event.inputs.libs }}'
+
+      - name: Upload
+        uses: actions/upload-artifact@v6
+        with:
+          path: ./${{ env.install_path }}/**
+          name: ${{ env.install_path }}
+
+  win32:
+    # The type of runner that the job will run on
+    runs-on: windows-latest
+    
+    # Run a job for each of the specified target architectures:
+    strategy:
+      matrix:
+        arch:
+          - x86
+          - x64
+    env:
+      NO_DLL: ${{ github.event.inputs.no_dll }}
+      BUILD_ARCH: ${{ matrix.arch }}
+
+    # Steps represent a sequence of tasks that will be executed as part of the job
+    steps:
+      # Checks-out your repository under $GITHUB_WORKSPACE, so your job can access it
+      - uses: actions/checkout@v6
+
+      - name: Build
+        shell: pwsh
+        run: .\build.ps1 -p win32 -a $env:BUILD_ARCH -libs '${{ github.event.inputs.libs }}'
+
+      - name: Upload
+        uses: actions/upload-artifact@v6
+        with:
+          path: ./${{ env.install_path }}/**
+          name: ${{ env.install_path }}
+  win32-arm64:
+    # The type of runner that the job will run on
+    runs-on: windows-11-arm
+    
+    env:
+      NO_DLL: ${{ github.event.inputs.no_dll }}
+
+    # Steps represent a sequence of tasks that will be executed as part of the job
+    steps:
+      # Checks-out your repository under $GITHUB_WORKSPACE, so your job can access it
+      - uses: actions/checkout@v6
+
+      - name: Build
+        shell: pwsh
+        run: .\build.ps1 -p win32 -a arm64 -libs '${{ github.event.inputs.libs }}'
+
+      - name: Upload
+        uses: actions/upload-artifact@v6
+        with:
+          path: ./${{ env.install_path }}/**
+          name: ${{ env.install_path }}
+   
+  winrt:
+    # The type of runner that the job will run on
+    runs-on: windows-latest
+    
+    # Run a job for each of the specified target architectures:
+    strategy:
+      matrix:
+        arch:
+          - x64
+          - arm64
+    env:
+      NO_DLL: ${{ github.event.inputs.no_dll }}
+      BUILD_ARCH: ${{ matrix.arch }}
+
+    # Steps represent a sequence of tasks that will be executed as part of the job
+    steps:
+      # Checks-out your repository under $GITHUB_WORKSPACE, so your job can access it
+      - uses: actions/checkout@v6
+
+      - name: Build
+        shell: pwsh
+        run: .\build.ps1 -p winrt -a $env:BUILD_ARCH -libs '${{ github.event.inputs.libs }}'
+
+      - name: Upload
+        uses: actions/upload-artifact@v6
+        with:
+          path: ./${{ env.install_path }}/**
+          name: ${{ env.install_path }}
+  wasm:
+    # The type of runner that the job will run on
+    runs-on: ubuntu-latest
+    # Steps represent a sequence of tasks that will be executed as part of the job
+    steps:
+      # Checks-out your repository under $GITHUB_WORKSPACE, so your job can access it
+      - uses: actions/checkout@v6
+
+      - name: Build
+        shell: pwsh
+        run: if ('${{ github.event.inputs.libs }}' -eq ''){ ./build.ps1 -p wasm -a '*' -libs 'zlib,openssl,curl' } else { ./build.ps1 -p wasm -a '*' -libs '${{ github.event.inputs.libs }}' }
+
+      - name: Upload
+        uses: actions/upload-artifact@v6
+        with:
+          path: ./${{ env.install_path }}/**
+          name: ${{ env.install_path }}
+  wasm64:
+    # The type of runner that the job will run on
+    runs-on: ubuntu-latest
+    # Steps represent a sequence of tasks that will be executed as part of the job
+    steps:
+      # Checks-out your repository under $GITHUB_WORKSPACE, so your job can access it
+      - uses: actions/checkout@v6
+
+      - name: Build
+        shell: pwsh
+        run: if ('${{ github.event.inputs.libs }}' -eq ''){ ./build.ps1 -p wasm64 -a '*' -libs 'zlib,openssl,curl' } else { ./build.ps1 -p wasm64 -a '*' -libs '${{ github.event.inputs.libs }}' }
+
+      - name: Upload
+        uses: actions/upload-artifact@v6
+        with:
+          path: ./${{ env.install_path }}/**
+          name: ${{ env.install_path }}
