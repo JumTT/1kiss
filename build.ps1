@@ -249,6 +249,24 @@ Foreach ($lib_name in $libs) {
         $build_conf.options += '-DOPENSSL_NO_ASM=ON'
     }
 
+    # curl on Windows links against our static nghttp2/nghttp3/ngtcp2 libs, but
+    # their public headers default to __declspec(dllimport) on WIN32 unless the
+    # matching *_STATICLIB macro is defined. Without it, curl's ngtcp2 backend
+    # references __imp_* symbols that the static libs don't export, failing to
+    # link libcurl.dll (LNK2019 / LNK1120). Define the macros so the headers
+    # declare plain symbols. Passed as one token to survive the option split.
+    if ($lib_name -eq 'curl' -and $is_win_family) {
+        $build_conf.options += '-DCMAKE_C_FLAGS=/DNGHTTP2_STATICLIB /DNGHTTP3_STATICLIB /DNGTCP2_STATICLIB'
+    }
+
+    # ngtcp2 on WinRT/UWP: the WindowsStore project template enables /sdl, which
+    # promotes C4703 (potentially uninitialized local pointer) to an error and
+    # breaks ngtcp2's own sources (ngtcp2_rob.c, ngtcp2_acktr.c). Turn /sdl off;
+    # we only consume the static lib.
+    if ($lib_name -eq 'ngtcp2' -and $is_winrt) {
+        $build_conf.options += '-DCMAKE_C_FLAGS=/sdl-'
+    }
+
     println "Building $lib_name in $lib_src..."
     println "build_conf.options: $($build_conf.options)"
     # patch before build
