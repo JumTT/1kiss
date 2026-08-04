@@ -200,6 +200,28 @@ Foreach ($lib_name in $libs) {
         $repo_url = $build_conf.repo
     }
 
+    # Skip libs that a restored cache already built. The install dir carries a
+    # '_1kiss' sentry (copied from the source tree after a successful build) whose
+    # first line is "ver: <version>". If it matches the version we're about to
+    # build, the cached artifacts are current and we can skip fetch+configure+
+    # compile entirely. Correctness of "current" is guaranteed by the CI cache
+    # key, which hashes every input that affects the artifacts (build.yml,
+    # patch1.ps1, *.patch, build.ps1, 1k/**); any change misses the cache, leaves
+    # the install dir empty, and forces a full rebuild. -rebuild bypasses this.
+    $install_dir = Join-Path $install_root $lib_name
+    if (!$rebuild) {
+        $cached_sentry = Join-Path $install_dir '_1kiss'
+        if (Test-Path $cached_sentry -PathType Leaf) {
+            $cached_ver = ((Get-Content $cached_sentry -First 1) -replace '^ver:\s*', '').Trim()
+            if ($cached_ver -eq "$version") {
+                println "Skip build ${lib_name} ${version}: up-to-date artifacts found in $install_dir (cache hit)"
+                Set-Variable -Name "${lib_name}_install_dir" -Value ($install_dir -replace '\\', '/') -Scope Global
+                continue
+            }
+            println "Rebuilding ${lib_name}: cached version '$cached_ver' != target '$version'"
+        }
+    }
+
     if (!$repo_url.EndsWith('.git') -and $rebuild) {
         $sentry_file = Join-Path $build_src "$lib_name/_1kiss"
         if (Test-Path $sentry_file -PathType Leaf) {
