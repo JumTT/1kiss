@@ -1,17 +1,21 @@
 name: dist
 
 # Controls when the action will run. Workflow runs when manually triggered using the UI
-# or API.
+# or API, or automatically after a manually-triggered `build` run succeeds.
 on:
+  workflow_run:
+    workflows: ["build"]
+    types:
+      - completed
   workflow_dispatch:
     # Inputs the workflow accepts.
     inputs:
       release_tag:
-        description: 'Please specific a exists release tag name, such as v88'
+        description: 'Release tag to publish to (e.g. v88). Leave empty to auto-derive the next v(N+1).'
         # Default value if no value is explicitly provided
         default: ''
-        # Input has to be provided for the workflow to run
-        required: true
+        # Optional: when empty the tag is auto-derived from existing releases
+        required: false
       test:
         # test only
         description: 'Whether test only'
@@ -45,7 +49,14 @@ jobs:
     # softprops/action-gh-release needs write access to create/update the release
     permissions:
       contents: write
-    if: ${{ github.event.workflow_run.conclusion == 'success' || github.event.inputs.release_tag != '' || github.event.inputs.test != '' }}
+    # Run when: (a) triggered by a *manually-dispatched* build that succeeded, or
+    # (b) this workflow is dispatched manually (with a release_tag or in test mode).
+    if: >-
+      ${{ (github.event_name == 'workflow_run'
+           && github.event.workflow_run.conclusion == 'success'
+           && github.event.workflow_run.event == 'workflow_dispatch')
+          || github.event.inputs.release_tag != ''
+          || github.event.inputs.test != '' }}
     # Steps represent a sequence of tasks that will be executed as part of the job
     steps:
 
@@ -59,14 +70,28 @@ jobs:
         # Required, workflow file name or ID
         workflow: build.yml
         workflow_conclusion: success
-        run_id: ${{ github.event.inputs.run_id }}
+        # Auto-triggered: pull artifacts from the exact build run that triggered
+        # us; manual dispatch: use the run_id input (empty = latest successful).
+        run_id: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.id || github.event.inputs.run_id }}
 
-    - name: Determine release tag name from input
+    - name: Determine release tag name
+      env:
+        GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        GH_REPO: ${{ github.repository }}
       run: |
-        if [ "$RELEASE_TAG_NAME" = "" ]; then
-          RELEASE_TAG_NAME=${{github.event.inputs.release_tag}}
-          echo "RELEASE_TAG_NAME=$RELEASE_TAG_NAME" >> $GITHUB_ENV
+        # Priority: explicit manual input wins; otherwise (auto-triggered) derive
+        # the next tag as v(N+1) from the highest existing vN release. A failed
+        # dist never creates a release, so a failed run leaves the number free and
+        # the next attempt reuses it — i.e. the counter only advances on success.
+        RELEASE_TAG_NAME="${{ github.event.inputs.release_tag }}"
+        if [ -z "$RELEASE_TAG_NAME" ]; then
+          latest=$(gh release list --limit 200 --json tagName -q '.[].tagName' \
+                   | { grep -E '^v[0-9]+$' || true; } | sed 's/^v//' | sort -n | tail -1)
+          if [ -z "$latest" ]; then latest=0; fi
+          RELEASE_TAG_NAME="v$((latest + 1))"
         fi
+        echo "RELEASE_TAG_NAME=$RELEASE_TAG_NAME" >> $GITHUB_ENV
+        echo "Resolved release tag: $RELEASE_TAG_NAME"
 
     - name: Prepare dist package
       run: |
