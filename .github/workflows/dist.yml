@@ -84,20 +84,51 @@ jobs:
         # dist never creates a release, so a failed run leaves the number free and
         # the next attempt reuses it — i.e. the counter only advances on success.
         RELEASE_TAG_NAME="${{ github.event.inputs.release_tag }}"
+        PREV_RELEASE_TAG=""
+        AUTO_TAG=false
         if [ -z "$RELEASE_TAG_NAME" ]; then
           latest=$(gh release list --limit 200 --json tagName -q '.[].tagName' \
                    | { grep -E '^v[0-9]+$' || true; } | sed 's/^v//' | sort -n | tail -1)
           if [ -z "$latest" ]; then latest=0; fi
           RELEASE_TAG_NAME="v$((latest + 1))"
+          AUTO_TAG=true
+          if [ "$latest" != "0" ]; then PREV_RELEASE_TAG="v$latest"; fi
         fi
         echo "RELEASE_TAG_NAME=$RELEASE_TAG_NAME" >> $GITHUB_ENV
-        echo "Resolved release tag: $RELEASE_TAG_NAME"
+        echo "PREV_RELEASE_TAG=$PREV_RELEASE_TAG" >> $GITHUB_ENV
+        echo "AUTO_TAG=$AUTO_TAG" >> $GITHUB_ENV
+        echo "Resolved release tag: $RELEASE_TAG_NAME (auto=$AUTO_TAG, prev=$PREV_RELEASE_TAG)"
 
     - name: Prepare dist package
       run: |
         ls
         source 1k/dist.sh $RELEASE_TAG_NAME '${{github.event.inputs.package_suffix}}' '${{github.event.inputs.libs}}'
         ls
+
+    - name: Skip publish when dist content is unchanged
+      # Only for auto-derived tags: if the freshly built version manifest matches
+      # the previous release's, the artifacts are identical and there's nothing new
+      # to publish — clear RELEASE_TAG_NAME so the upload step is skipped and the
+      # version number stays free for the next real change. Manual dispatch (an
+      # explicit release_tag) always publishes.
+      if: ${{ env.AUTO_TAG == 'true' && env.PREV_RELEASE_TAG != '' }}
+      env:
+        GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        GH_REPO: ${{ github.repository }}
+      run: |
+        prev_manifest="$(mktemp)"
+        if gh release download "$PREV_RELEASE_TAG" --pattern '_1kiss.yml' --output "$prev_manifest" --clobber 2>/dev/null; then
+          if diff -q <(sort "$prev_manifest") <(sort "$DIST_VERLIST") >/dev/null 2>&1; then
+            echo "Dist content identical to $PREV_RELEASE_TAG; skipping publish."
+            echo "RELEASE_TAG_NAME=" >> $GITHUB_ENV
+          else
+            echo "Dist content differs from $PREV_RELEASE_TAG; will publish $RELEASE_TAG_NAME."
+            echo "----- previous ($PREV_RELEASE_TAG) -----"; sort "$prev_manifest"
+            echo "----- current -----"; sort "$DIST_VERLIST"
+          fi
+        else
+          echo "No _1kiss.yml asset on $PREV_RELEASE_TAG (or download failed); publishing $RELEASE_TAG_NAME."
+        fi
 
     - name: Upload dist package to release page
       if: ${{ env.RELEASE_TAG_NAME != '' }}
