@@ -1712,6 +1712,12 @@ function preprocess_andorid() {
         $arch = $t_archs[$options.a]
         $outputOptions += "-DCMAKE_TOOLCHAIN_FILE=$cmake_toolchain_file", "-DANDROID_ABI=$arch"
         $outputOptions += "-DANDROID_USE_LEGACY_TOOLCHAIN_FILE=false"
+        # Pin the min API level, otherwise the NDK toolchain falls back to its
+        # default (16). armv7/x86 need >=18 so BoringSSL's cpu_arm_linux.cc can
+        # see getauxval(); see build.ps1 for the per-arch levels.
+        if ($Global:android_api_level) {
+            $outputOptions += "-DANDROID_PLATFORM=android-$Global:android_api_level"
+        }
         # If set to ONLY, then only the roots in CMAKE_FIND_ROOT_PATH will be searched
         # If set to BOTH, then the host system paths and the paths in CMAKE_FIND_ROOT_PATH will be searched
         # If set to NEVER, then the roots in CMAKE_FIND_ROOT_PATH will be ignored and only the host system root will be used

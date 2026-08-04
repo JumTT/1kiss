@@ -234,14 +234,18 @@ Foreach ($lib_name in $libs) {
         $build_conf.options += (eval $build_conf."options_$target_os") -split ' '
     }
 
-    # BoringSSL on Windows/ARM64: the CMake build uses enable_language(ASM) (not
-    # NASM, which is x86-only) and then feeds the ASM target the full, un-filtered
-    # perlasm source list, including x86_64/apple .S files (e.g.
-    # aes-gcm-avx2-x86_64-apple.S). MSVC's ARM64 assembler can't build those, the
-    # .obj is never produced, and crypto.lib fails to link (LNK1181). Building the
-    # crypto primitives from portable C avoids the mis-selected assembly; we only
-    # consume the static libs, so the perf cost is acceptable.
-    if ($lib_name -eq 'boringssl' -and $is_win_family -and $target_cpu -eq 'arm64') {
+    # BoringSSL assembly can't be built in two of our configurations, so fall
+    # back to its portable C implementations (we only consume the static libs,
+    # so the perf cost is acceptable):
+    #   * Windows: the CMake build uses enable_language(ASM) yet feeds the ASM
+    #     target the full, un-filtered perlasm source list, including
+    #     x86_64/apple .S files (e.g. aes-gcm-avx2-x86_64-apple.S). MSVC's
+    #     assembler can't build those, the .obj is never produced and crypto.lib
+    #     fails to link (LNK1181). Seen on both arm64 and x64 under VS2026.
+    #   * wasm/wasm64: emcc is detected as the ASM compiler but rejects the
+    #     GCC-style '-Wa,-g' passed for the x86_64 .S files (and x86_64 asm can't
+    #     target wasm anyway).
+    if ($lib_name -eq 'boringssl' -and ($is_win_family -or $is_wasm)) {
         $build_conf.options += '-DOPENSSL_NO_ASM=ON'
     }
 
@@ -280,7 +284,12 @@ Foreach ($lib_name in $libs) {
     Push-Location $lib_src
     $install_dir = Join-Path $install_root $lib_name
     mkdirs $install_dir
-    Set-Variable -Name "${lib_name}_install_dir" -Value $install_dir -Scope Global
+    # Expose as $<lib>_install_dir for build.yml option substitution (eval). Use
+    # forward slashes: these values get spliced into CMake command strings and,
+    # on Windows, a backslash path like D:\a\...\ssl.lib makes downstream
+    # check_symbol_exists() TryCompile projects choke on "Invalid character
+    # escape '\a'". Forward slashes are valid on every platform CMake supports.
+    Set-Variable -Name "${lib_name}_install_dir" -Value ($install_dir -replace '\\', '/') -Scope Global
 
     if (!$cb_target) {
         $cb_target = $build_conf.cb_target
