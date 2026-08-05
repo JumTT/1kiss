@@ -190,14 +190,21 @@ Foreach ($lib_name in $libs) {
         }
     }
 
-    $is_gn = $build_conf.cb_tool -eq 'gn'
+    # Local source modules (e.g. nativebridge) have no upstream repo: they ship
+    # their sources under src/<lib>/native and are staged by patch1.ps1. Skip all
+    # repo/fetch handling for them.
+    $is_local = [bool]$build_conf.local
+
+    $is_gn = (!$is_local) -and ($build_conf.cb_tool -eq 'gn')
     if ($is_gn) {
         setup_gclient
     }
-    if ($build_conf.repo.contains('$ver')) {
-        $repo_url = $build_conf.repo -replace '\$ver', $version
-    } else {
-        $repo_url = $build_conf.repo
+    if (!$is_local) {
+        if ($build_conf.repo.contains('$ver')) {
+            $repo_url = $build_conf.repo -replace '\$ver', $version
+        } else {
+            $repo_url = $build_conf.repo
+        }
     }
 
     # Skip libs that a restored cache already built. The install dir carries a
@@ -222,14 +229,24 @@ Foreach ($lib_name in $libs) {
         }
     }
 
-    if (!$repo_url.EndsWith('.git') -and $rebuild) {
-        $sentry_file = Join-Path $build_src "$lib_name/_1kiss"
-        if (Test-Path $sentry_file -PathType Leaf) {
-            println "Deleting sentry file: $sentry_file"
-            Remove-Item $sentry_file -Force
-        }
+    if ($is_local) {
+        # Stage the local source dir and expose $lib_src / $<lib>_src like
+        # fetch.ps1 would; patch1.ps1 copies src/<lib>/native/* into it.
+        $lib_src = Join-Path $build_src $lib_name
+        if ($rebuild) { sremove $lib_src }
+        mkdirs $lib_src
+        Set-Variable -Name "${lib_name}_src" -Value $lib_src -Scope Global
     }
-    . $fetch_script -uri $repo_url -ver $version -rev $revision -prefix $build_src -name $lib_name
+    else {
+        if (!$repo_url.EndsWith('.git') -and $rebuild) {
+            $sentry_file = Join-Path $build_src "$lib_name/_1kiss"
+            if (Test-Path $sentry_file -PathType Leaf) {
+                println "Deleting sentry file: $sentry_file"
+                Remove-Item $sentry_file -Force
+            }
+        }
+        . $fetch_script -uri $repo_url -ver $version -rev $revision -prefix $build_src -name $lib_name
+    }
 
     # preprocess $build_conf.options
     if ($build_conf.options) {
@@ -289,6 +306,26 @@ Foreach ($lib_name in $libs) {
         $build_conf.options += '-DCMAKE_C_FLAGS=/sdl-'
     }
 
+    # NativeBridge pipeline: the nativebridge module inlines curl (and its deps)
+    # into a single self-contained shared lib, so curl itself must be static on
+    # every platform. On Windows curl otherwise defaults to a shared libcurl.dll
+    # (curl/build.yml options_msw), which would make NativeBridge.dll depend on
+    # it. Force static here so the standalone libcurl.dll product is untouched
+    # unless this env switch is set. Guarded so it only fires for CI/local runs
+    # that actually build nativebridge.
+    if ($lib_name -eq 'curl' -and $env:NATIVEBRIDGE -eq '1' -and $is_win_family) {
+        $build_conf.options += '-DBUILD_SHARED_LIBS=OFF'
+    }
+
+    # NativeBridge pipeline on Windows: zlib defaults to import-lib only
+    # (zlib/build.yml options_msw sets ZLIB_BUILD_STATIC=OFF -> zlib.lib + zlib1.dll).
+    # NativeBridge links the static zlib archive (zs.lib) to stay self-contained,
+    # so build that target too. Only under NATIVEBRIDGE=1 so the default zlib
+    # product (zlib1.dll) is unchanged for other consumers.
+    if ($lib_name -eq 'zlib' -and $env:NATIVEBRIDGE -eq '1' -and $is_win_family) {
+        $build_conf.options += '-DZLIB_BUILD_STATIC=ON'
+    }
+
     println "Building $lib_name in $lib_src..."
     println "build_conf.options: $($build_conf.options)"
     # patch before build
@@ -310,7 +347,7 @@ Foreach ($lib_name in $libs) {
         }
     }
 
-    if ($build_conf.repo.EndsWith('.git') -and $rebuild) {
+    if (!$is_local -and $build_conf.repo.EndsWith('.git') -and $rebuild) {
         # gclent manage submodules manually, so don't do git clean
         if (!$is_gn) {
           git -C $lib_src clean -dfx -e _1kiss

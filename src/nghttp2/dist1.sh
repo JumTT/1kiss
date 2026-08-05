@@ -4,7 +4,7 @@ DIST_DIR="${DIST_ROOT}/${LIB_NAME}"
 
 dist_lib ${LIB_NAME} ${DIST_DIR} $DISTF_NATIVES
 
-# Note: nghttp2 1.70.0 only builds a shared library (libnghttp2.so/.dylib and
-# nghttp2.dll+import lib); it has no static archive on any platform, so we can't
-# assemble an xcframework for it. The shared libs are distributed as-is by
-# dist_lib above.
+# nghttp2 1.70.0 keys off BUILD_STATIC_LIBS/BUILD_SHARED_LIBS (the old
+# ENABLE_STATIC_LIB/ENABLE_SHARED_LIB flags were removed upstream). build.yml now
+# forces static-only, so libnghttp2.a / nghttp2.lib are produced and distributed
+# by dist_lib above; there is no shared lib and no xcframework for nghttp2.

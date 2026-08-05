@@ -1,0 +1,259 @@
+name: nativebridge
+
+# Builds the NativeBridge aggregate native library (curlw module) for every Unity
+# target platform, then assembles a NativeBridge-CSharpe-<ver>.zip Unity package.
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'NativeBridge package version (matches src/nativebridge/build.yml ver)'
+        default: '1.0.0'
+        required: false
+      release_tag:
+        description: 'Optional release tag to upload the package to (e.g. nativebridge-v1.0.0)'
+        default: ''
+        required: false
+
+env:
+  GH_XCODE_VER: 16.4
+  VS_DEPLOYMENT_TARGET: 10.0.17763.0
+  # Force curl static on Windows so NativeBridge.dll is self-contained.
+  NATIVEBRIDGE: '1'
+  # Full dependency chain + the local nativebridge module (built last).
+  NB_LIBS: 'zlib,boringssl,nghttp3,ngtcp2,nghttp2,curl,nativebridge'
+
+jobs:
+  win32:
+    runs-on: windows-latest
+    strategy:
+      matrix:
+        arch: [x64]
+    env:
+      BUILD_ARCH: ${{ matrix.arch }}
+    steps:
+      - uses: actions/checkout@v6
+      - name: Build
+        shell: pwsh
+        run: .\build.ps1 -p win32 -a $env:BUILD_ARCH -libs $env:NB_LIBS
+      - name: Upload
+        uses: actions/upload-artifact@v6
+        with:
+          path: ./${{ env.install_path }}/**
+          name: ${{ env.install_path }}
+
+  win32-arm64:
+    runs-on: windows-11-arm
+    steps:
+      - uses: actions/checkout@v6
+      - name: Build
+        shell: pwsh
+        run: .\build.ps1 -p win32 -a arm64 -libs $env:NB_LIBS
+      - name: Upload
+        uses: actions/upload-artifact@v6
+        with:
+          path: ./${{ env.install_path }}/**
+          name: ${{ env.install_path }}
+
+  linux:
+    strategy:
+      matrix:
+        include:
+          - arch: x64
+            runner: ubuntu-22.04
+          - arch: arm64
+            runner: ubuntu-22.04-arm
+    runs-on: ${{ matrix.runner }}
+    env:
+      BUILD_ARCH: ${{ matrix.arch }}
+    steps:
+      - uses: actions/checkout@v6
+      - name: Build
+        shell: pwsh
+        run: ./build.ps1 -p linux -a $env:BUILD_ARCH -libs $env:NB_LIBS
+      - name: Upload
+        uses: actions/upload-artifact@v6
+        with:
+          path: ./${{ env.install_path }}/**
+          name: ${{ env.install_path }}
+
+  android:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        arch: [armv7, arm64, x86, x64]
+    env:
+      BUILD_ARCH: ${{ matrix.arch }}
+    steps:
+      - uses: actions/checkout@v6
+      - name: Setup NDK
+        shell: pwsh
+        run: ./1k/1kiss.ps1 -p android -a $env:BUILD_ARCH -setupOnly -ndkOnly
+      - name: Build
+        shell: pwsh
+        run: ./build.ps1 -p android -a $env:BUILD_ARCH -libs $env:NB_LIBS
+      - name: Upload
+        uses: actions/upload-artifact@v6
+        with:
+          path: ./${{ env.install_path }}/**
+          name: ${{ env.install_path }}
+
+  osx:
+    strategy:
+      matrix:
+        include:
+          - arch: x64
+            runner: macos-15-intel
+          - arch: arm64
+            runner: macos-latest
+    runs-on: ${{ matrix.runner }}
+    env:
+      BUILD_ARCH: ${{ matrix.arch }}
+    steps:
+      - uses: actions/checkout@v6
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+      - name: Build
+        shell: pwsh
+        run: ./build.ps1 -p osx -a $env:BUILD_ARCH -libs $env:NB_LIBS
+      - name: Upload
+        uses: actions/upload-artifact@v6
+        with:
+          path: ./${{ env.install_path }}/**
+          name: ${{ env.install_path }}
+
+  ios:
+    runs-on: macos-15
+    strategy:
+      matrix:
+        arch: [arm64, x64]
+    env:
+      BUILD_ARCH: ${{ matrix.arch }}
+    steps:
+      - uses: actions/checkout@v6
+      - name: Setup Xcode version
+        uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: '${{ env.GH_XCODE_VER }}'
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+      - name: Build
+        shell: pwsh
+        run: ./build.ps1 -p ios -a $env:BUILD_ARCH -libs $env:NB_LIBS
+      - name: Upload
+        uses: actions/upload-artifact@v6
+        with:
+          path: ./${{ env.install_path }}/**
+          name: ${{ env.install_path }}
+
+  ios-arm64-sim:
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v6
+      - name: Setup Xcode version
+        uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: '${{ env.GH_XCODE_VER }}'
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+      - name: Build
+        shell: pwsh
+        run: ./build.ps1 -p ios -a arm64 -sdk simulator -libs $env:NB_LIBS
+      - name: Upload
+        uses: actions/upload-artifact@v6
+        with:
+          path: ./${{ env.install_path }}/**
+          name: ${{ env.install_path }}
+
+  tvos:
+    runs-on: macos-15
+    strategy:
+      matrix:
+        arch: [arm64, x64]
+    env:
+      BUILD_ARCH: ${{ matrix.arch }}
+    steps:
+      - uses: actions/checkout@v6
+      - name: Setup Xcode version
+        uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: '${{ env.GH_XCODE_VER }}'
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+      - name: Build
+        shell: pwsh
+        run: ./build.ps1 -p tvos -a $env:BUILD_ARCH -libs $env:NB_LIBS
+      - name: Upload
+        uses: actions/upload-artifact@v6
+        with:
+          path: ./${{ env.install_path }}/**
+          name: ${{ env.install_path }}
+
+  tvos-arm64-sim:
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v6
+      - name: Setup Xcode version
+        uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: '${{ env.GH_XCODE_VER }}'
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+      - name: Build
+        shell: pwsh
+        run: ./build.ps1 -p tvos -a arm64 -sdk simulator -libs $env:NB_LIBS
+      - name: Upload
+        uses: actions/upload-artifact@v6
+        with:
+          path: ./${{ env.install_path }}/**
+          name: ${{ env.install_path }}
+
+  # Assemble the Unity package from all platform artifacts.
+  dist:
+    needs: [win32, win32-arm64, linux, android, osx, ios, ios-arm64-sim, tvos, tvos-arm64-sim]
+    runs-on: macos-latest  # needs lipo + xcodebuild for the xcframework
+    # softprops/action-gh-release needs write access to upload to the release.
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v6
+      - name: Download all build artifacts
+        uses: actions/download-artifact@v6
+        with:
+          path: _artifacts
+      - name: Flatten artifacts to install_* dirs
+        shell: bash
+        run: |
+          # Each artifact is named after its install_path and contains that tree.
+          for d in _artifacts/install_*; do
+            [ -d "$d" ] || continue
+            base=$(basename "$d")
+            rm -rf "./$base"
+            mv "$d" "./$base"
+          done
+          ls -d install_* || true
+      - name: Assemble NativeBridge package
+        shell: bash
+        run: bash src/nativebridge/dist1.sh '${{ github.event.inputs.version }}'
+      - name: Upload package artifact
+        uses: actions/upload-artifact@v6
+        with:
+          name: NativeBridge-CSharpe-${{ github.event.inputs.version }}
+          path: ${{ env.NB_DIST_ZIP }}
+      - name: Upload to release
+        if: ${{ github.event.inputs.release_tag != '' }}
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.event.inputs.release_tag }}
+          files: ${{ env.NB_DIST_ZIP }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

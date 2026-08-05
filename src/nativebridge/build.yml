@@ -1,0 +1,29 @@
+# NativeBridge: Unity/C# aggregate native library.
+#
+# This is a *local* source module (no upstream repo to fetch). build.ps1 sees
+# `local: true` and copies src/nativebridge/native/* into buildsrc/nativebridge
+# instead of calling fetch.ps1. It is built last, so every dependency's
+# $<lib>_install_dir global is already set and can be substituted below via eval.
+ver: 1.0.0
+local: true
+cb_tool: cmake
+
+# No `targets` restriction: NativeBridge is a container and builds on every
+# platform. Platform support is decided per feature module inside
+# native/CMakeLists.txt — e.g. the curlw module (which needs libcurl / real
+# sockets) auto-disables itself on wasm, but future modules may support wasm.
+
+# Common (also the msw/Windows lib names). The nativebridge CMakeLists consumes
+# these NB_* cache vars; forward slashes keep the paths CMake-escape safe.
+# NB_NGTCP2_CRYPTO_LIBRARY is the BoringSSL crypto backend for ngtcp2 — curl's
+# HTTP/3 code calls ngtcp2_crypto_boringssl_*; without it the final link fails.
+# NB_ZLIB_LIBRARY points at the STATIC zlib archive: on Windows the default zlib
+# build only ships the import lib (zlib.lib + zlib1.dll), so build.ps1 forces the
+# static target (zs.lib) under NATIVEBRIDGE=1 to keep NativeBridge.dll standalone.
+options: -DNB_VERSION=1.0.0 -DNB_CURL_INCLUDE_DIR=$curl_install_dir/include -DNB_CURL_LIBRARY=$curl_install_dir/lib/libcurl.lib -DNB_SSL_LIBRARY=$boringssl_install_dir/lib/ssl.lib -DNB_CRYPTO_LIBRARY=$boringssl_install_dir/lib/crypto.lib -DNB_NGHTTP2_LIBRARY=$nghttp2_install_dir/lib/nghttp2.lib -DNB_NGHTTP3_LIBRARY=$nghttp3_install_dir/lib/nghttp3.lib -DNB_NGTCP2_LIBRARY=$ngtcp2_install_dir/lib/ngtcp2.lib -DNB_NGTCP2_CRYPTO_LIBRARY=$ngtcp2_install_dir/lib/ngtcp2_crypto_boringssl.lib -DNB_ZLIB_LIBRARY=$zlib_install_dir/lib/zs.lib
+
+# Unix (linux/android/apple) static archive names.
+options_unix: -DNB_CURL_LIBRARY=$curl_install_dir/lib/libcurl.a -DNB_SSL_LIBRARY=$boringssl_install_dir/lib/libssl.a -DNB_CRYPTO_LIBRARY=$boringssl_install_dir/lib/libcrypto.a -DNB_NGHTTP2_LIBRARY=$nghttp2_install_dir/lib/libnghttp2.a -DNB_NGHTTP3_LIBRARY=$nghttp3_install_dir/lib/libnghttp3.a -DNB_NGTCP2_LIBRARY=$ngtcp2_install_dir/lib/libngtcp2.a -DNB_NGTCP2_CRYPTO_LIBRARY=$ngtcp2_install_dir/lib/libngtcp2_crypto_boringssl.a -DNB_ZLIB_LIBRARY=$zlib_install_dir/lib/libz.a
+
+# Help find_package/dependent TryCompile probes locate the dep trees.
+options_cross: -DCMAKE_FIND_ROOT_PATH=$curl_install_dir;$boringssl_install_dir;$nghttp2_install_dir;$nghttp3_install_dir;$ngtcp2_install_dir;$zlib_install_dir
