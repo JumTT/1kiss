@@ -146,6 +146,28 @@ if(CMAKE_SYSTEM_NAME MATCHES "Android")
 endif()
 
 # ---------------------------------------------------------------------------
+# Link-time dead-code elimination — drop unreferenced functions/data pulled in
+# from the bundled static deps (curl/BoringSSL/nghttp*/ngtcp2/zlib). Combined
+# with -fvisibility=hidden this can shave a lot off the shared lib. Only for the
+# SHARED target: on iOS/tvOS we ship a static archive that is linked later by
+# IL2CPP, where the app link does the real dead-strip, so gc here is a no-op.
+# NDK already compiles with -ffunction/-fdata-sections; on desktop Linux the
+# deps aren't section-split so gc is best-effort there (still harmless).
+# ---------------------------------------------------------------------------
+if(NOT NB_APPLE_EMBED)
+  if(MSVC)
+    # Fold identical/unused sections (default at Release, set explicitly).
+    target_link_options(NativeBridge PRIVATE "/OPT:REF" "/OPT:ICF")
+  elseif(APPLE)
+    # macOS shared lib: Apple ld dead-strips unreachable code.
+    target_link_options(NativeBridge PRIVATE "-Wl,-dead_strip")
+  else()
+    # GNU/LLD (Linux/Android): drop unused input sections.
+    target_link_options(NativeBridge PRIVATE "-Wl,--gc-sections")
+  endif()
+endif()
+
+# ---------------------------------------------------------------------------
 # iOS/tvOS: merge dependency archives into libNativeBridge.a.
 #
 # On a STATIC target, target_link_libraries only records usage requirements — it
