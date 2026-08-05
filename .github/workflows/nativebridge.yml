@@ -312,11 +312,34 @@ jobs:
         with:
           name: NativeBridge-CSharpe-${{ github.event.inputs.version }}
           path: ${{ env.NB_DIST_ZIP }}
+      - name: Resolve release tag
+        id: reltag
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          INPUT_TAG: ${{ github.event.inputs.release_tag }}
+        run: |
+          if [ -n "$INPUT_TAG" ]; then
+            # Explicit tag always wins.
+            echo "tag=$INPUT_TAG" >> "$GITHUB_OUTPUT"
+            echo "Using provided release_tag: $INPUT_TAG"
+          else
+            # No tag given: fall back to the most recently created release. The
+            # releases API returns newest-first, so [0] is the last created one.
+            latest=$(gh release list --repo "$GITHUB_REPOSITORY" --limit 1 --json tagName --jq '.[0].tagName' 2>/dev/null || true)
+            if [ -n "$latest" ] && [ "$latest" != "null" ]; then
+              echo "tag=$latest" >> "$GITHUB_OUTPUT"
+              echo "No release_tag given; defaulting to latest release tag: $latest"
+            else
+              echo "tag=" >> "$GITHUB_OUTPUT"
+              echo "No release_tag given and no existing release found; skipping publish."
+            fi
+          fi
       - name: Upload to release
-        if: ${{ github.event.inputs.release_tag != '' }}
+        if: ${{ steps.reltag.outputs.tag != '' }}
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: ${{ github.event.inputs.release_tag }}
+          tag_name: ${{ steps.reltag.outputs.tag }}
           files: ${{ env.NB_DIST_ZIP }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
