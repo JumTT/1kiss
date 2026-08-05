@@ -30,6 +30,13 @@ elseif(CMAKE_SYSTEM_NAME MATCHES "tvOS")
 endif()
 if(NB_IOS OR NB_TVOS)
   set(NB_APPLE_EMBED TRUE)  # iOS/tvOS => static lib for IL2CPP
+  # We configure/build each Apple platform+arch in its own build tree (never
+  # multiple SDKs in one tree), so we don't need Xcode's EFFECTIVE_PLATFORM_NAME
+  # path suffix. Leaving it on (the default for embedded SDKs) makes it leak into
+  # $<TARGET_FILE:...>, yielding paths like Release${EFFECTIVE_PLATFORM_NAME}/...
+  # that our libtool POST_BUILD step can't open. Turn it off so TARGET_FILE
+  # resolves to a real path.
+  set_property(GLOBAL PROPERTY XCODE_EMIT_EFFECTIVE_PLATFORM_NAME OFF)
 endif()
 
 # ---------------------------------------------------------------------------
@@ -119,7 +126,8 @@ if(NB_ENABLE_CURLW)
 
   # System libs curl/boringssl need per platform.
   if(WIN32)
-    target_link_libraries(NativeBridge PRIVATE ws2_32 crypt32 bcrypt)
+    # iphlpapi: curl's socket/QUIC code (peer.c) uses if_nametoindex().
+    target_link_libraries(NativeBridge PRIVATE ws2_32 crypt32 bcrypt iphlpapi)
   elseif(CMAKE_SYSTEM_NAME MATCHES "Android")
     target_link_libraries(NativeBridge PRIVATE log android)
   elseif(CMAKE_SYSTEM_NAME MATCHES "Linux")
