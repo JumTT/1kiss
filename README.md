@@ -71,9 +71,10 @@ for example, if you use git to clone axmol(~80MB) and run it's `setup.ps1`, then
 
 ### Layout
 
-- `src/nativebridge/native/` — C/C++ sources: `modules/curlw/{curlw.h,curlw.cpp}` (the authoritative ABI + impl), `compat/` (yasio-free socket shim), `nativebridge.{h,cpp}`, `CMakeLists.txt`.
+- `src/nativebridge/native/` — C/C++ sources: `modules/curlw/{curlw.h,curlw.cpp}` (the authoritative ABI + curl wrapper; the small socket/timing helpers are inlined here), `nativebridge.{h,cpp}` (library core + `nativebridge_version()`), `CMakeLists.txt`.
 - `src/nativebridge/csharp/` — `Curlw.cs` (namespace `NativeBridge`) + `NativeBridge.asmdef`.
 - `src/nativebridge/build.yml` — `local: true` module, built last in the chain.
+- `src/nativebridge/{patch1,clean1,pack}.ps1` + `dist1.sh` — stage sources, trim the install tree, local build helper, and assemble the Unity package.
 
 ### Versioning
 
@@ -87,7 +88,8 @@ for example, if you use git to clone axmol(~80MB) and run it's `setup.ps1`, then
 | --- | --- | --- |
 | Windows x64 / arm64 | `NativeBridge.dll` | `NativeBridge` |
 | Android arm64-v8a / armeabi-v7a / x86_64 / x86 | `libNativeBridge.so` | `NativeBridge` |
-| iOS / tvOS (device + sim) | `NativeBridge.xcframework` | `__Internal` |
+| iOS (device + sim) | `Plugins/iOS/NativeBridge.xcframework` | `__Internal` |
+| tvOS (device + sim) | `Plugins/tvOS/NativeBridge.xcframework` | `__Internal` |
 | macOS (universal) | `NativeBridge.dylib` | `NativeBridge` |
 | Linux x64 / arm64 | `libNativeBridge.so` | `NativeBridge` |
 | WebGL | — (unsupported: needs raw sockets/UDP) | — |
@@ -101,6 +103,6 @@ $env:NATIVEBRIDGE=1
 # or: ./src/nativebridge/pack.ps1
 ```
 
-CI: run the `nativebridge` workflow (`.github/workflows/nativebridge.yml`) to build every platform and produce `NativeBridge-CSharpe-<ver>.zip` (a drop-in Unity package with `Plugins/*` + `Runtime/Curlw.cs`).
+CI: run the `nativebridge` workflow (`.github/workflows/nativebridge.yml`) to build every platform and produce `NativeBridge-CSharpe-<ver>.zip` (a drop-in Unity package with `Plugins/*` + `Runtime/Curlw.cs`). Per-platform dependency builds are cached (independent `nbbuild-` key), so unchanged libs are restored instead of recompiled. Pass a `release_tag` input to also upload the package to that release.
 
 > Native callbacks (`CurlwWriteDataDelegate`, `CurlwSocketManagedDelegate`) must be `static` methods decorated with `[MonoPInvokeCallback]` on IL2CPP/AOT targets. `curlw_perform` blocks — call it off the Unity main thread.
