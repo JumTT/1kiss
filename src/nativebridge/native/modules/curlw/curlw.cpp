@@ -268,6 +268,15 @@ NATIVEBRIDGE_API CURLcode NATIVEBRIDGE_CALL curlw_easy_setopt_string(CURL* handl
 {
     return curl_easy_setopt(handle, option, optval);
 }
+NATIVEBRIDGE_API CURLcode NATIVEBRIDGE_CALL curlw_easy_setopt_blob(CURL* handle, CURLoption option,
+                                                                  void* data, size_t len, unsigned int flags)
+{
+    struct curl_blob blob;
+    blob.data  = data;
+    blob.len   = len;
+    blob.flags = flags; // CURL_BLOB_COPY (1) => curl owns a copy
+    return curl_easy_setopt(handle, option, &blob);
+}
 
 NATIVEBRIDGE_API CURLcode NATIVEBRIDGE_CALL curlw_easy_getinfo_int(CURL* handle, CURLINFO info, int* outval)
 {
@@ -373,6 +382,20 @@ NATIVEBRIDGE_API CURLMcode NATIVEBRIDGE_CALL curlw_multi_timeout(CURLM* multi_ha
         *milliseconds = static_cast<int64_t>(ms);
     return ec;
 }
+NATIVEBRIDGE_API CURLMcode NATIVEBRIDGE_CALL curlw_multi_poll(CURLM* multi_handle, struct curl_waitfd* extra_fds,
+                                                             unsigned int extra_nfds, int timeout_ms, int* numfds)
+{
+    return curl_multi_poll(multi_handle, extra_fds, extra_nfds, timeout_ms, numfds);
+}
+NATIVEBRIDGE_API CURLMcode NATIVEBRIDGE_CALL curlw_multi_wait(CURLM* multi_handle, struct curl_waitfd* extra_fds,
+                                                             unsigned int extra_nfds, int timeout_ms, int* numfds)
+{
+    return curl_multi_wait(multi_handle, extra_fds, extra_nfds, timeout_ms, numfds);
+}
+NATIVEBRIDGE_API CURLMcode NATIVEBRIDGE_CALL curlw_multi_wakeup(CURLM* multi_handle)
+{
+    return curl_multi_wakeup(multi_handle);
+}
 NATIVEBRIDGE_API const char* NATIVEBRIDGE_CALL curlw_multi_strerror_imp(CURLMcode error)
 {
     return curl_multi_strerror(error);
@@ -424,6 +447,151 @@ NATIVEBRIDGE_API struct curl_slist* NATIVEBRIDGE_CALL curlw_slist_append(struct 
 NATIVEBRIDGE_API void NATIVEBRIDGE_CALL curlw_slist_free_all(struct curl_slist* list)
 {
     curl_slist_free_all(list);
+}
+
+// --- misc / memory -----------------------------------------------------------
+NATIVEBRIDGE_API void NATIVEBRIDGE_CALL curlw_free(void* p) { curl_free(p); }
+
+// --- easy: extra entry points ------------------------------------------------
+NATIVEBRIDGE_API CURL* NATIVEBRIDGE_CALL curlw_easy_duphandle(CURL* handle) { return curl_easy_duphandle(handle); }
+NATIVEBRIDGE_API CURLcode NATIVEBRIDGE_CALL curlw_easy_pause(CURL* handle, int action) { return curl_easy_pause(handle, action); }
+NATIVEBRIDGE_API CURLcode NATIVEBRIDGE_CALL curlw_easy_upkeep(CURL* handle) { return curl_easy_upkeep(handle); }
+NATIVEBRIDGE_API CURLcode NATIVEBRIDGE_CALL curlw_easy_recv(CURL* handle, void* buffer, size_t buflen, size_t* n)
+{
+    return curl_easy_recv(handle, buffer, buflen, n);
+}
+NATIVEBRIDGE_API CURLcode NATIVEBRIDGE_CALL curlw_easy_send(CURL* handle, const void* buffer, size_t buflen, size_t* n)
+{
+    return curl_easy_send(handle, buffer, buflen, n);
+}
+NATIVEBRIDGE_API char* NATIVEBRIDGE_CALL curlw_easy_escape(CURL* handle, const char* string, int length)
+{
+    return curl_easy_escape(handle, string, length);
+}
+NATIVEBRIDGE_API char* NATIVEBRIDGE_CALL curlw_easy_unescape(CURL* handle, const char* string, int inlength, int* outlength)
+{
+    return curl_easy_unescape(handle, string, inlength, outlength);
+}
+
+// --- version info ------------------------------------------------------------
+NATIVEBRIDGE_API const curl_version_info_data* NATIVEBRIDGE_CALL curlw_version_info(void)
+{
+    return curl_version_info(CURLVERSION_NOW);
+}
+NATIVEBRIDGE_API int NATIVEBRIDGE_CALL curlw_verinfo_features(const curl_version_info_data* d) { return d ? d->features : 0; }
+NATIVEBRIDGE_API unsigned int NATIVEBRIDGE_CALL curlw_verinfo_version_num(const curl_version_info_data* d) { return d ? d->version_num : 0; }
+NATIVEBRIDGE_API const char* NATIVEBRIDGE_CALL curlw_verinfo_version(const curl_version_info_data* d) { return d ? d->version : nullptr; }
+NATIVEBRIDGE_API const char* NATIVEBRIDGE_CALL curlw_verinfo_ssl_version(const curl_version_info_data* d) { return d ? d->ssl_version : nullptr; }
+NATIVEBRIDGE_API const char* NATIVEBRIDGE_CALL curlw_verinfo_libz_version(const curl_version_info_data* d) { return d ? d->libz_version : nullptr; }
+NATIVEBRIDGE_API const char* NATIVEBRIDGE_CALL curlw_verinfo_nghttp2_version(const curl_version_info_data* d) { return d ? d->nghttp2_version : nullptr; }
+NATIVEBRIDGE_API const char* NATIVEBRIDGE_CALL curlw_verinfo_quic_version(const curl_version_info_data* d) { return d ? d->quic_version : nullptr; }
+NATIVEBRIDGE_API const char* NATIVEBRIDGE_CALL curlw_verinfo_cainfo(const curl_version_info_data* d) { return d ? d->cainfo : nullptr; }
+NATIVEBRIDGE_API const char* NATIVEBRIDGE_CALL curlw_verinfo_capath(const curl_version_info_data* d) { return d ? d->capath : nullptr; }
+
+// --- header API --------------------------------------------------------------
+NATIVEBRIDGE_API CURLHcode NATIVEBRIDGE_CALL curlw_easy_header(CURL* handle, const char* name, size_t nameindex,
+                                                              unsigned int origin, int request, struct curl_header** hout)
+{
+    return curl_easy_header(handle, name, nameindex, origin, request, hout);
+}
+NATIVEBRIDGE_API struct curl_header* NATIVEBRIDGE_CALL curlw_easy_nextheader(CURL* handle, unsigned int origin,
+                                                                            int request, struct curl_header* prev)
+{
+    return curl_easy_nextheader(handle, origin, request, prev);
+}
+NATIVEBRIDGE_API const char* NATIVEBRIDGE_CALL curlw_header_name(const struct curl_header* h) { return h ? h->name : nullptr; }
+NATIVEBRIDGE_API const char* NATIVEBRIDGE_CALL curlw_header_value(const struct curl_header* h) { return h ? h->value : nullptr; }
+NATIVEBRIDGE_API size_t NATIVEBRIDGE_CALL curlw_header_amount(const struct curl_header* h) { return h ? h->amount : 0; }
+NATIVEBRIDGE_API size_t NATIVEBRIDGE_CALL curlw_header_index(const struct curl_header* h) { return h ? h->index : 0; }
+NATIVEBRIDGE_API unsigned int NATIVEBRIDGE_CALL curlw_header_origin(const struct curl_header* h) { return h ? h->origin : 0; }
+
+// --- share API ---------------------------------------------------------------
+NATIVEBRIDGE_API CURLSH* NATIVEBRIDGE_CALL curlw_share_init(void) { return curl_share_init(); }
+NATIVEBRIDGE_API CURLSHcode NATIVEBRIDGE_CALL curlw_share_cleanup(CURLSH* share) { return curl_share_cleanup(share); }
+NATIVEBRIDGE_API CURLSHcode NATIVEBRIDGE_CALL curlw_share_setopt_int(CURLSH* share, CURLSHoption option, int value)
+{
+    return curl_share_setopt(share, option, static_cast<long>(value));
+}
+NATIVEBRIDGE_API CURLSHcode NATIVEBRIDGE_CALL curlw_share_enable_default_locks(CURLSH* share)
+{
+    // One mutex per lock-data category, shared process-wide. curl serializes
+    // access to each cache type through these so the share is safe to use from
+    // multiple threads (e.g. one thread per download segment).
+    static std::mutex s_share_locks[CURL_LOCK_DATA_LAST];
+    struct L {
+        static void lock(CURL*, curl_lock_data data, curl_lock_access, void*)
+        {
+            if (data < CURL_LOCK_DATA_LAST) s_share_locks[data].lock();
+        }
+        static void unlock(CURL*, curl_lock_data data, void*)
+        {
+            if (data < CURL_LOCK_DATA_LAST) s_share_locks[data].unlock();
+        }
+    };
+    CURLSHcode ec = curl_share_setopt(share, CURLSHOPT_LOCKFUNC, &L::lock);
+    if (ec == CURLSHE_OK)
+        ec = curl_share_setopt(share, CURLSHOPT_UNLOCKFUNC, &L::unlock);
+    return ec;
+}
+NATIVEBRIDGE_API const char* NATIVEBRIDGE_CALL curlw_share_strerror_imp(CURLSHcode error) { return curl_share_strerror(error); }
+
+// --- MIME --------------------------------------------------------------------
+NATIVEBRIDGE_API curl_mime* NATIVEBRIDGE_CALL curlw_mime_init(CURL* easy) { return curl_mime_init(easy); }
+NATIVEBRIDGE_API void NATIVEBRIDGE_CALL curlw_mime_free(curl_mime* mime) { curl_mime_free(mime); }
+NATIVEBRIDGE_API curl_mimepart* NATIVEBRIDGE_CALL curlw_mime_addpart(curl_mime* mime) { return curl_mime_addpart(mime); }
+NATIVEBRIDGE_API CURLcode NATIVEBRIDGE_CALL curlw_mime_name(curl_mimepart* part, const char* name) { return curl_mime_name(part, name); }
+NATIVEBRIDGE_API CURLcode NATIVEBRIDGE_CALL curlw_mime_data(curl_mimepart* part, const char* data, size_t datasize) { return curl_mime_data(part, data, datasize); }
+NATIVEBRIDGE_API CURLcode NATIVEBRIDGE_CALL curlw_mime_filedata(curl_mimepart* part, const char* filename) { return curl_mime_filedata(part, filename); }
+NATIVEBRIDGE_API CURLcode NATIVEBRIDGE_CALL curlw_mime_filename(curl_mimepart* part, const char* filename) { return curl_mime_filename(part, filename); }
+NATIVEBRIDGE_API CURLcode NATIVEBRIDGE_CALL curlw_mime_type(curl_mimepart* part, const char* mimetype) { return curl_mime_type(part, mimetype); }
+NATIVEBRIDGE_API CURLcode NATIVEBRIDGE_CALL curlw_mime_encoder(curl_mimepart* part, const char* encoding) { return curl_mime_encoder(part, encoding); }
+NATIVEBRIDGE_API CURLcode NATIVEBRIDGE_CALL curlw_mime_headers(curl_mimepart* part, struct curl_slist* headers, int take_ownership) { return curl_mime_headers(part, headers, take_ownership); }
+NATIVEBRIDGE_API CURLcode NATIVEBRIDGE_CALL curlw_mime_subparts(curl_mimepart* part, curl_mime* subparts) { return curl_mime_subparts(part, subparts); }
+
+// --- URL API -----------------------------------------------------------------
+NATIVEBRIDGE_API CURLU* NATIVEBRIDGE_CALL curlw_url(void) { return curl_url(); }
+NATIVEBRIDGE_API void NATIVEBRIDGE_CALL curlw_url_cleanup(CURLU* handle) { curl_url_cleanup(handle); }
+NATIVEBRIDGE_API CURLU* NATIVEBRIDGE_CALL curlw_url_dup(const CURLU* in) { return curl_url_dup(in); }
+NATIVEBRIDGE_API CURLUcode NATIVEBRIDGE_CALL curlw_url_get(const CURLU* handle, CURLUPart what, char** part, unsigned int flags)
+{
+    return curl_url_get(handle, what, part, flags);
+}
+NATIVEBRIDGE_API CURLUcode NATIVEBRIDGE_CALL curlw_url_set(CURLU* handle, CURLUPart what, const char* part, unsigned int flags)
+{
+    return curl_url_set(handle, what, part, flags);
+}
+NATIVEBRIDGE_API const char* NATIVEBRIDGE_CALL curlw_url_strerror_imp(CURLUcode error) { return curl_url_strerror(error); }
+
+// --- WebSocket ---------------------------------------------------------------
+NATIVEBRIDGE_API CURLcode NATIVEBRIDGE_CALL curlw_ws_recv(CURL* handle, void* buffer, size_t buflen,
+                                                         size_t* recv, const struct curl_ws_frame** meta)
+{
+    return curl_ws_recv(handle, buffer, buflen, recv, meta);
+}
+NATIVEBRIDGE_API CURLcode NATIVEBRIDGE_CALL curlw_ws_send(CURL* handle, const void* buffer, size_t buflen,
+                                                         size_t* sent, int64_t fragsize, unsigned int flags)
+{
+    return curl_ws_send(handle, buffer, buflen, sent, static_cast<curl_off_t>(fragsize), flags);
+}
+NATIVEBRIDGE_API const struct curl_ws_frame* NATIVEBRIDGE_CALL curlw_ws_meta(CURL* handle) { return curl_ws_meta(handle); }
+NATIVEBRIDGE_API int NATIVEBRIDGE_CALL curlw_wsframe_flags(const struct curl_ws_frame* f) { return f ? f->flags : 0; }
+NATIVEBRIDGE_API int64_t NATIVEBRIDGE_CALL curlw_wsframe_offset(const struct curl_ws_frame* f) { return f ? static_cast<int64_t>(f->offset) : 0; }
+NATIVEBRIDGE_API int64_t NATIVEBRIDGE_CALL curlw_wsframe_bytesleft(const struct curl_ws_frame* f) { return f ? static_cast<int64_t>(f->bytesleft) : 0; }
+NATIVEBRIDGE_API size_t NATIVEBRIDGE_CALL curlw_wsframe_len(const struct curl_ws_frame* f) { return f ? f->len : 0; }
+
+// --- multi: event-driven extensions ------------------------------------------
+NATIVEBRIDGE_API CURLMcode NATIVEBRIDGE_CALL curlw_multi_assign(CURLM* multi_handle, intptr_t sockfd, void* sockp)
+{
+    return curl_multi_assign(multi_handle, static_cast<curl_socket_t>(sockfd), sockp);
+}
+NATIVEBRIDGE_API CURLMcode NATIVEBRIDGE_CALL curlw_multi_socket_action(CURLM* multi_handle, intptr_t s,
+                                                                      int ev_bitmask, int* running_handles)
+{
+    return curl_multi_socket_action(multi_handle, static_cast<curl_socket_t>(s), ev_bitmask, running_handles);
+}
+NATIVEBRIDGE_API CURL** NATIVEBRIDGE_CALL curlw_multi_get_handles(CURLM* multi_handle)
+{
+    return curl_multi_get_handles(multi_handle);
 }
 
 } // extern "C"

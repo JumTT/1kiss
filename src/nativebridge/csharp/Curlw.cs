@@ -21,7 +21,7 @@ using System.Runtime.InteropServices;
 using CURLH = System.IntPtr;   // CURL*  (easy handle)
 using CURLMH = System.IntPtr;  // CURLM* (multi handle)
 
-namespace NativeBridge
+namespace NativeBridgeF
 {
     public static class CURLDefines
     {
@@ -51,6 +51,53 @@ namespace NativeBridge
         public const int CURL_GLOBAL_NOTHING = 0;
         public const int CURL_GLOBAL_DEFAULT = CURL_GLOBAL_ALL;
         public const int CURL_GLOBAL_ACK_EINTR = (1 << 2);
+
+        // --- Tier 1 value/bit-flag constants (curl 8.21.0) -------------------
+        // Pass these as the optval to curlw_easy_setopt_long for the matching
+        // CURLOPTTYPE_VALUES / LONG options.
+
+        // CURLOPT_IPRESOLVE
+        public const int CURL_IPRESOLVE_WHATEVER = 0;
+        public const int CURL_IPRESOLVE_V4 = 1;
+        public const int CURL_IPRESOLVE_V6 = 2;
+
+        // CURLOPT_SSLVERSION (min); OR with a CURL_SSLVERSION_MAX_* to cap.
+        public const int CURL_SSLVERSION_DEFAULT = 0;
+        public const int CURL_SSLVERSION_TLSv1 = 1;
+        public const int CURL_SSLVERSION_TLSv1_0 = 4;
+        public const int CURL_SSLVERSION_TLSv1_1 = 5;
+        public const int CURL_SSLVERSION_TLSv1_2 = 6;
+        public const int CURL_SSLVERSION_TLSv1_3 = 7;
+        public const int CURL_SSLVERSION_MAX_DEFAULT = (CURL_SSLVERSION_TLSv1 << 16);
+        public const int CURL_SSLVERSION_MAX_TLSv1_0 = (CURL_SSLVERSION_TLSv1_0 << 16);
+        public const int CURL_SSLVERSION_MAX_TLSv1_1 = (CURL_SSLVERSION_TLSv1_1 << 16);
+        public const int CURL_SSLVERSION_MAX_TLSv1_2 = (CURL_SSLVERSION_TLSv1_2 << 16);
+        public const int CURL_SSLVERSION_MAX_TLSv1_3 = (CURL_SSLVERSION_TLSv1_3 << 16);
+
+        // CURLOPT_PROXYTYPE
+        public const int CURLPROXY_HTTP = 0;
+        public const int CURLPROXY_HTTP_1_0 = 1;
+        public const int CURLPROXY_HTTPS = 2;
+        public const int CURLPROXY_HTTPS2 = 3;
+        public const int CURLPROXY_SOCKS4 = 4;
+        public const int CURLPROXY_SOCKS5 = 5;
+        public const int CURLPROXY_SOCKS4A = 6;
+        public const int CURLPROXY_SOCKS5_HOSTNAME = 7;
+
+        // CURLOPT_ALTSVC_CTRL bitmask
+        public const int CURLALTSVC_READONLYFILE = (1 << 2);
+        public const int CURLALTSVC_H1 = (1 << 3);
+        public const int CURLALTSVC_H2 = (1 << 4);
+        public const int CURLALTSVC_H3 = (1 << 5);
+
+        // CURLOPT_HTTPAUTH bitmask (unsigned long in curl; pass via setopt_long)
+        public const long CURLAUTH_NONE = 0;
+        public const long CURLAUTH_BASIC = (1L << 0);
+        public const long CURLAUTH_DIGEST = (1L << 1);
+        public const long CURLAUTH_NEGOTIATE = (1L << 2);
+        public const long CURLAUTH_NTLM = (1L << 3);
+        public const long CURLAUTH_BEARER = (1L << 6);
+        public const long CURLAUTH_ANY = ~0L;
     }
 
     /// <summary>
@@ -105,6 +152,58 @@ namespace NativeBridge
         CURLOPT_READFUNCTION          = CURLDefines.CURLOPTTYPE_FUNCTIONPOINT + 12,
         CURLOPT_READDATA              = CURLDefines.CURLOPTTYPE_CBPOINT + 9,
         CURLOPT_PRIVATE               = CURLDefines.CURLOPTTYPE_OBJECTPOINT + 103,
+
+        // --- Tier 1 additions (values verified against curl 8.21.0 curl.h) ----
+        // These reuse the existing typed setopt entry points (long / string /
+        // slist), so no native changes are required.
+
+        // DNS / connection control
+        CURLOPT_DOH_URL               = CURLDefines.CURLOPTTYPE_STRINGPOINT + 279,
+        CURLOPT_HAPPY_EYEBALLS_TIMEOUT_MS = CURLDefines.CURLOPTTYPE_LONG + 271,
+        CURLOPT_RESOLVE               = CURLDefines.CURLOPTTYPE_SLISTPOINT + 203,
+        CURLOPT_CONNECT_TO            = CURLDefines.CURLOPTTYPE_SLISTPOINT + 243,
+        CURLOPT_IPRESOLVE             = CURLDefines.CURLOPTTYPE_VALUES + 113,
+        CURLOPT_PIPEWAIT              = CURLDefines.CURLOPTTYPE_LONG + 237,
+        CURLOPT_CONNECTTIMEOUT        = CURLDefines.CURLOPTTYPE_LONG + 78,   /* seconds */
+        CURLOPT_TIMEOUT               = CURLDefines.CURLOPTTYPE_LONG + 13,   /* seconds */
+
+        // TLS / certificates
+        CURLOPT_CAPATH                = CURLDefines.CURLOPTTYPE_STRINGPOINT + 97,
+        CURLOPT_SSLCERT               = CURLDefines.CURLOPTTYPE_STRINGPOINT + 25,
+        CURLOPT_SSLKEY                = CURLDefines.CURLOPTTYPE_STRINGPOINT + 87,
+        CURLOPT_PINNEDPUBLICKEY       = CURLDefines.CURLOPTTYPE_STRINGPOINT + 230,
+        CURLOPT_SSLVERSION            = CURLDefines.CURLOPTTYPE_VALUES + 32,
+        CURLOPT_ALTSVC                = CURLDefines.CURLOPTTYPE_STRINGPOINT + 287,
+        CURLOPT_ALTSVC_CTRL           = CURLDefines.CURLOPTTYPE_LONG + 286,
+        CURLOPT_HSTS                  = CURLDefines.CURLOPTTYPE_STRINGPOINT + 300,
+
+        // Proxy / auth / cookies / redirects
+        CURLOPT_PROXY                 = CURLDefines.CURLOPTTYPE_STRINGPOINT + 4,
+        CURLOPT_PROXYTYPE             = CURLDefines.CURLOPTTYPE_VALUES + 101,
+        CURLOPT_NOPROXY               = CURLDefines.CURLOPTTYPE_STRINGPOINT + 177,
+        CURLOPT_USERPWD               = CURLDefines.CURLOPTTYPE_STRINGPOINT + 5,
+        CURLOPT_USERNAME              = CURLDefines.CURLOPTTYPE_STRINGPOINT + 173,
+        CURLOPT_PASSWORD              = CURLDefines.CURLOPTTYPE_STRINGPOINT + 174,
+        CURLOPT_HTTPAUTH              = CURLDefines.CURLOPTTYPE_VALUES + 107,
+        CURLOPT_COOKIE                = CURLDefines.CURLOPTTYPE_STRINGPOINT + 22,
+        CURLOPT_COOKIEFILE            = CURLDefines.CURLOPTTYPE_STRINGPOINT + 31,
+        CURLOPT_COOKIEJAR             = CURLDefines.CURLOPTTYPE_STRINGPOINT + 82,
+        CURLOPT_MAXREDIRS             = CURLDefines.CURLOPTTYPE_LONG + 68,
+        CURLOPT_FAILONERROR           = CURLDefines.CURLOPTTYPE_LONG + 45,
+
+        // --- Tier 2 additions: callbacks (reuse the pointer setopt entry) ------
+        CURLOPT_HEADERFUNCTION        = CURLDefines.CURLOPTTYPE_FUNCTIONPOINT + 79,
+        CURLOPT_HEADERDATA            = CURLDefines.CURLOPTTYPE_CBPOINT + 29,
+        CURLOPT_XFERINFOFUNCTION      = CURLDefines.CURLOPTTYPE_FUNCTIONPOINT + 219,
+        CURLOPT_XFERINFODATA          = CURLDefines.CURLOPTTYPE_CBPOINT + 57,
+        CURLOPT_DEBUGFUNCTION         = CURLDefines.CURLOPTTYPE_FUNCTIONPOINT + 94,
+        CURLOPT_DEBUGDATA             = CURLDefines.CURLOPTTYPE_CBPOINT + 95,
+
+        // --- Tier 3 additions: BLOB options (need curlw_easy_setopt_blob) ------
+        CURLOPT_CAINFO_BLOB           = CURLDefines.CURLOPTTYPE_BLOB + 309,
+        CURLOPT_SSLCERT_BLOB          = CURLDefines.CURLOPTTYPE_BLOB + 291,
+        CURLOPT_SSLKEY_BLOB           = CURLDefines.CURLOPTTYPE_BLOB + 292,
+        CURLOPT_PROXY_CAINFO_BLOB     = CURLDefines.CURLOPTTYPE_BLOB + 310,
     }
 
     // https://curl.se/libcurl/c/CURLOPT_HTTP_VERSION.html
@@ -264,6 +363,36 @@ namespace NativeBridge
         CURLINFO_HTTP_VERSION    = CURLDefines.CURLINFO_LONG + 46,
         CURLINFO_TOTAL_TIME_T    = CURLDefines.CURLINFO_OFF_T + 50,
         CURLINFO_PRIVATE         = CURLDefines.CURLINFO_STRING + 21,
+
+        // --- Tier 1 additions (values verified against curl 8.21.0 curl.h) ----
+        // All covered by the existing getinfo_long / _double / _pointer entry
+        // points (OFF_T infos read via getinfo_long, which branches on the type
+        // mask natively).
+
+        // Upload counters
+        CURLINFO_SPEED_UPLOAD_T          = CURLDefines.CURLINFO_OFF_T + 10,
+        CURLINFO_CONTENT_LENGTH_UPLOAD_T = CURLDefines.CURLINFO_OFF_T + 16,
+
+        // Timing breakdown (double = seconds; *_T = microseconds as OFF_T)
+        CURLINFO_PRETRANSFER_TIME    = CURLDefines.CURLINFO_DOUBLE + 6,
+        CURLINFO_STARTTRANSFER_TIME  = CURLDefines.CURLINFO_DOUBLE + 17,
+        CURLINFO_APPCONNECT_TIME     = CURLDefines.CURLINFO_DOUBLE + 33,  /* TLS handshake done */
+        CURLINFO_REDIRECT_TIME       = CURLDefines.CURLINFO_DOUBLE + 19,
+        CURLINFO_NAMELOOKUP_TIME_T   = CURLDefines.CURLINFO_OFF_T + 51,
+        CURLINFO_CONNECT_TIME_T      = CURLDefines.CURLINFO_OFF_T + 52,
+        CURLINFO_PRETRANSFER_TIME_T  = CURLDefines.CURLINFO_OFF_T + 53,
+        CURLINFO_STARTTRANSFER_TIME_T = CURLDefines.CURLINFO_OFF_T + 54,
+        CURLINFO_APPCONNECT_TIME_T   = CURLDefines.CURLINFO_OFF_T + 56,
+
+        // Connection / diagnostics
+        CURLINFO_REDIRECT_COUNT   = CURLDefines.CURLINFO_LONG + 20,
+        CURLINFO_NUM_CONNECTS     = CURLDefines.CURLINFO_LONG + 26,
+        CURLINFO_OS_ERRNO         = CURLDefines.CURLINFO_LONG + 25,
+        CURLINFO_SSL_VERIFYRESULT = CURLDefines.CURLINFO_LONG + 13,
+        CURLINFO_PRIMARY_PORT     = CURLDefines.CURLINFO_LONG + 40,
+        CURLINFO_LOCAL_PORT       = CURLDefines.CURLINFO_LONG + 42,
+        CURLINFO_LOCAL_IP         = CURLDefines.CURLINFO_STRING + 41,
+        CURLINFO_SCHEME           = CURLDefines.CURLINFO_STRING + 49,
     }
 
     public enum CURLMSG
@@ -271,6 +400,173 @@ namespace NativeBridge
         CURLMSG_NONE,
         CURLMSG_DONE, /* transfer complete; result carries the CURLcode */
         CURLMSG_LAST
+    }
+
+    // --- share API enums (curl 8.21.0) --------------------------------------
+    public enum CURLSHcode
+    {
+        CURLSHE_OK,
+        CURLSHE_BAD_OPTION,   /* 1 */
+        CURLSHE_IN_USE,       /* 2 */
+        CURLSHE_INVALID,      /* 3 */
+        CURLSHE_NOMEM,        /* 4 */
+        CURLSHE_NOT_BUILT_IN, /* 5 */
+        CURLSHE_LAST
+    }
+
+    public enum CURLSHoption
+    {
+        CURLSHOPT_NONE,
+        CURLSHOPT_SHARE,      /* CURL_LOCK_DATA_* to start sharing */
+        CURLSHOPT_UNSHARE,
+        CURLSHOPT_LOCKFUNC,
+        CURLSHOPT_UNLOCKFUNC,
+        CURLSHOPT_USERDATA,
+        CURLSHOPT_LAST
+    }
+
+    /// <summary>Values for CURLSHOPT_SHARE / CURLSHOPT_UNSHARE.</summary>
+    public enum CURLlockData
+    {
+        CURL_LOCK_DATA_NONE = 0,
+        CURL_LOCK_DATA_SHARE,
+        CURL_LOCK_DATA_COOKIE,
+        CURL_LOCK_DATA_DNS,
+        CURL_LOCK_DATA_SSL_SESSION,
+        CURL_LOCK_DATA_CONNECT,
+        CURL_LOCK_DATA_PSL,
+        CURL_LOCK_DATA_HSTS,
+        CURL_LOCK_DATA_LAST
+    }
+
+    // --- URL API enums (urlapi.h) -------------------------------------------
+    public enum CURLUPart
+    {
+        CURLUPART_URL,
+        CURLUPART_SCHEME,
+        CURLUPART_USER,
+        CURLUPART_PASSWORD,
+        CURLUPART_OPTIONS,
+        CURLUPART_HOST,
+        CURLUPART_PORT,
+        CURLUPART_PATH,
+        CURLUPART_QUERY,
+        CURLUPART_FRAGMENT,
+        CURLUPART_ZONEID
+    }
+
+    public enum CURLUcode
+    {
+        CURLUE_OK,
+        CURLUE_BAD_HANDLE, CURLUE_BAD_PARTPOINTER, CURLUE_MALFORMED_INPUT,
+        CURLUE_BAD_PORT_NUMBER, CURLUE_UNSUPPORTED_SCHEME, CURLUE_URLDECODE,
+        CURLUE_OUT_OF_MEMORY, CURLUE_USER_NOT_ALLOWED, CURLUE_UNKNOWN_PART,
+        CURLUE_NO_SCHEME, CURLUE_NO_USER, CURLUE_NO_PASSWORD, CURLUE_NO_OPTIONS,
+        CURLUE_NO_HOST, CURLUE_NO_PORT, CURLUE_NO_QUERY, CURLUE_NO_FRAGMENT,
+        CURLUE_NO_ZONEID, CURLUE_BAD_FILE_URL, CURLUE_BAD_FRAGMENT,
+        CURLUE_BAD_HOSTNAME, CURLUE_BAD_IPV6, CURLUE_BAD_LOGIN, CURLUE_BAD_PASSWORD,
+        CURLUE_BAD_PATH, CURLUE_BAD_QUERY, CURLUE_BAD_SCHEME, CURLUE_BAD_SLASHES,
+        CURLUE_BAD_USER, CURLUE_LACKS_IDN, CURLUE_TOO_LARGE, CURLUE_LAST
+    }
+
+    public enum CURLHcode
+    {
+        CURLHE_OK,
+        CURLHE_BADINDEX,      /* 1 */
+        CURLHE_MISSING,       /* 2 */
+        CURLHE_NOHEADERS,     /* 3 */
+        CURLHE_NOREQUEST,     /* 4 */
+        CURLHE_OUT_OF_MEMORY, /* 5 */
+        CURLHE_BAD_ARGUMENT,  /* 6 */
+        CURLHE_NOT_BUILT_IN   /* 7 */
+    }
+
+    /// <summary>Constants for the URL API flags, header origins, pause, ws, version bits.</summary>
+    public static class CURLExtras
+    {
+        // curl_url_get / _set flags
+        public const uint CURLU_DEFAULT_PORT = 1u << 0;
+        public const uint CURLU_NO_DEFAULT_PORT = 1u << 1;
+        public const uint CURLU_DEFAULT_SCHEME = 1u << 2;
+        public const uint CURLU_NON_SUPPORT_SCHEME = 1u << 3;
+        public const uint CURLU_PATH_AS_IS = 1u << 4;
+        public const uint CURLU_URLDECODE = 1u << 6;
+        public const uint CURLU_URLENCODE = 1u << 7;
+        public const uint CURLU_APPENDQUERY = 1u << 8;
+        public const uint CURLU_GUESS_SCHEME = 1u << 9;
+        public const uint CURLU_PUNYCODE = 1u << 12;
+
+        // curl_easy_header origin bits
+        public const uint CURLH_HEADER = 1u << 0;
+        public const uint CURLH_TRAILER = 1u << 1;
+        public const uint CURLH_CONNECT = 1u << 2;
+        public const uint CURLH_PSEUDO = 1u << 4;
+
+        // curl_easy_pause action bits
+        public const int CURLPAUSE_RECV = 1 << 0;
+        public const int CURLPAUSE_SEND = 1 << 2;
+        public const int CURLPAUSE_ALL = CURLPAUSE_RECV | CURLPAUSE_SEND;
+        public const int CURLPAUSE_CONT = 0;
+
+        // curl_ws_send / frame flags (CURLWS_*)
+        public const uint CURLWS_TEXT = 1u << 0;
+        public const uint CURLWS_BINARY = 1u << 1;
+        public const uint CURLWS_CONT = 1u << 2;
+        public const uint CURLWS_CLOSE = 1u << 3;
+        public const uint CURLWS_PING = 1u << 4;
+        public const uint CURLWS_OFFSET = 1u << 5;
+        public const uint CURLWS_PONG = 1u << 6;
+
+        // curl_version_info features bitmask (CURL_VERSION_*)
+        public const int CURL_VERSION_IPV6 = 1 << 0;
+        public const int CURL_VERSION_SSL = 1 << 2;
+        public const int CURL_VERSION_ASYNCHDNS = 1 << 7;
+        public const int CURL_VERSION_HTTP2 = 1 << 16;
+        public const int CURL_VERSION_BROTLI = 1 << 23;
+        public const int CURL_VERSION_ALTSVC = 1 << 24;
+        public const int CURL_VERSION_HTTP3 = 1 << 25;
+        public const int CURL_VERSION_ZSTD = 1 << 26;
+        public const int CURL_VERSION_HSTS = 1 << 28;
+    }
+
+    /// <summary>curl_infotype — the kind of data passed to a debug callback.</summary>
+    public enum CURLINFOTYPE
+    {
+        CURLINFO_TEXT = 0,
+        CURLINFO_HEADER_IN,    /* 1 */
+        CURLINFO_HEADER_OUT,   /* 2 */
+        CURLINFO_DATA_IN,      /* 3 */
+        CURLINFO_DATA_OUT,     /* 4 */
+        CURLINFO_SSL_DATA_IN,  /* 5 */
+        CURLINFO_SSL_DATA_OUT, /* 6 */
+    }
+
+    /// <summary>
+    /// Mirrors struct curl_waitfd (multi.h) for curlw_multi_poll/wait.
+    /// WARNING: the native <c>fd</c> field is <c>curl_socket_t</c>, whose width is
+    /// platform-dependent — 8 bytes on Win64 (SOCKET = UINT_PTR) but only 4 bytes
+    /// on 64-bit POSIX (int). This managed struct uses <see cref="IntPtr"/> (8 bytes),
+    /// so <c>Marshal.SizeOf&lt;CurlWaitFd&gt;()</c> == 12/16 does NOT match the
+    /// native 8-byte layout on Linux/macOS/Android. Do NOT marshal a
+    /// <c>CurlWaitFd[]</c> across the ABI on those platforms. The exposed
+    /// curlw_multi_poll/wait overloads take <c>IntPtr extra_fds</c> precisely so
+    /// this struct is never marshalled as an array by the binding itself; it is
+    /// provided only for callers that build the array manually on Windows or with
+    /// their own platform-correct layout.
+    /// </summary>
+    [StructLayout(LayoutKind.Sequential)]
+    public struct CurlWaitFd
+    {
+        public IntPtr fd;   // curl_socket_t (SOCKET on Win64 = 64-bit; int on POSIX)
+        public short events;
+        public short revents;
+    }
+
+    public static class CURLWaitPoll
+    {
+        public const short CURL_WAIT_POLLIN  = 0x0001;
+        public const short CURL_WAIT_POLLPRI = 0x0002;
+        public const short CURL_WAIT_POLLOUT = 0x0004;
     }
 
     /// <summary>
@@ -281,6 +577,29 @@ namespace NativeBridge
     /// </summary>
     [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
     public delegate UIntPtr CurlwWriteDataDelegate(IntPtr content, UIntPtr size, UIntPtr nmemb, IntPtr userdata);
+
+    /// <summary>
+    /// Header callback (CURLOPT_HEADERFUNCTION). Same ABI as the write callback:
+    /// one header line per invocation. Return size*nmemb to continue.
+    /// MUST be static + [MonoPInvokeCallback(typeof(CurlwWriteDataDelegate))].
+    /// </summary>
+    // (Header callback reuses CurlwWriteDataDelegate — identical native signature.)
+
+    /// <summary>
+    /// Progress callback (CURLOPT_XFERINFOFUNCTION). Return non-zero to abort the
+    /// transfer. MUST be static + [MonoPInvokeCallback(typeof(CurlwXferInfoDelegate))].
+    /// </summary>
+    [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
+    public delegate int CurlwXferInfoDelegate(IntPtr clientp, long dltotal, long dlnow, long ultotal, long ulnow);
+
+    /// <summary>
+    /// Debug/verbose callback (CURLOPT_DEBUGFUNCTION). <paramref name="data"/> holds
+    /// <paramref name="size"/> bytes of the given <paramref name="type"/> (e.g. TEXT
+    /// lines contain "ALPN: server accepted h2"). Return 0.
+    /// MUST be static + [MonoPInvokeCallback(typeof(CurlwDebugDelegate))].
+    /// </summary>
+    [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
+    public delegate int CurlwDebugDelegate(IntPtr handle, CURLINFOTYPE type, IntPtr data, UIntPtr size, IntPtr userptr);
 
     /// <summary>
     /// Managed open/close socket callback. Matches native curlw_socket_managed_cb.
@@ -445,6 +764,72 @@ namespace NativeBridge
             return curlw_easy_setopt_pointer_cb_imp(handle, option, optval);
         }
 
+        // --- Tier 2 callback overloads (reuse the pointer setopt entry point) --
+        // Each pins the managed delegate in s_handleCallbacks so the JIT thunk
+        // survives until curlw_easy_cleanup/reset. Use CURLOPT_HEADERFUNCTION with
+        // the write-callback overload above (identical native signature); the two
+        // overloads below cover the progress and debug callbacks.
+
+        private static void KeepAliveCallback(IntPtr handle, Delegate cb)
+        {
+            lock (s_cbLock)
+            {
+                if (!s_handleCallbacks.TryGetValue(handle, out var list))
+                {
+                    list = new System.Collections.Generic.List<Delegate>();
+                    s_handleCallbacks[handle] = list;
+                }
+                list.Add(cb);
+            }
+        }
+
+        [DllImport(LIBNAME, CallingConvention = CallingConvention.Cdecl, EntryPoint = "curlw_easy_setopt_pointer")]
+        private static extern CURLcode curlw_easy_setopt_pointer_xferinfo_imp(CURLH handle, CURLoption option, CurlwXferInfoDelegate optval);
+
+        public static CURLcode curlw_easy_setopt_pointer(CURLH handle, CURLoption option, CurlwXferInfoDelegate optval)
+        {
+            KeepAliveCallback(handle, optval);
+            return curlw_easy_setopt_pointer_xferinfo_imp(handle, option, optval);
+        }
+
+        [DllImport(LIBNAME, CallingConvention = CallingConvention.Cdecl, EntryPoint = "curlw_easy_setopt_pointer")]
+        private static extern CURLcode curlw_easy_setopt_pointer_debug_imp(CURLH handle, CURLoption option, CurlwDebugDelegate optval);
+
+        public static CURLcode curlw_easy_setopt_pointer(CURLH handle, CURLoption option, CurlwDebugDelegate optval)
+        {
+            KeepAliveCallback(handle, optval);
+            return curlw_easy_setopt_pointer_debug_imp(handle, option, optval);
+        }
+
+        // --- Tier 3: BLOB setopt (CURLOPT_*_BLOB) -----------------------------
+        // Native marshals (data, len, flags) into a struct curl_blob. Pass
+        // copy=true (CURL_BLOB_COPY) so curl owns a copy and the managed buffer
+        // need not outlive the call.
+        [DllImport(LIBNAME, CallingConvention = CallingConvention.Cdecl)]
+        private static extern CURLcode curlw_easy_setopt_blob(CURLH handle, CURLoption option,
+                                                              IntPtr data, UIntPtr len, uint flags);
+
+        /// <summary>
+        /// Set a BLOB option (e.g. CURLOPT_CAINFO_BLOB) from a managed byte[]. The
+        /// bytes are copied into libcurl (CURL_BLOB_COPY), so <paramref name="data"/>
+        /// need not be pinned after this call returns.
+        /// </summary>
+        public static CURLcode curlw_easy_setopt_blob(CURLH handle, CURLoption option, byte[] data)
+        {
+            if (data == null) return CURLcode.CURLE_BAD_FUNCTION_ARGUMENT;
+            GCHandle pin = GCHandle.Alloc(data, GCHandleType.Pinned);
+            try
+            {
+                const uint CURL_BLOB_COPY = 1;
+                return curlw_easy_setopt_blob(handle, option, pin.AddrOfPinnedObject(),
+                                              (UIntPtr)data.Length, CURL_BLOB_COPY);
+            }
+            finally
+            {
+                pin.Free();
+            }
+        }
+
         [DllImport(LIBNAME, CallingConvention = CallingConvention.Cdecl, CharSet = CharSet.Ansi)]
         public static extern CURLcode curlw_easy_setopt_string(CURLH handle, CURLoption option, string optval);
 
@@ -524,6 +909,22 @@ namespace NativeBridge
         [DllImport(LIBNAME, CallingConvention = CallingConvention.Cdecl)]
         public static extern CURLMcode curlw_multi_timeout(CURLMH multi_handle, out long milliseconds);
 
+        // --- Tier 3: event-driven driving (curl_multi_poll / wait / wakeup) ---
+        // Prefer poll() over the fdset+select loop: it blocks until a socket is
+        // ready (up to timeout_ms) instead of spinning. Pass extra_fds=IntPtr.Zero,
+        // extra_nfds=0 when you have no extra descriptors. curlw_multi_wakeup can
+        // be called from another thread to break a blocking poll early.
+        [DllImport(LIBNAME, CallingConvention = CallingConvention.Cdecl)]
+        public static extern CURLMcode curlw_multi_poll(CURLMH multi_handle, IntPtr extra_fds,
+                                                        uint extra_nfds, int timeout_ms, out int numfds);
+
+        [DllImport(LIBNAME, CallingConvention = CallingConvention.Cdecl)]
+        public static extern CURLMcode curlw_multi_wait(CURLMH multi_handle, IntPtr extra_fds,
+                                                        uint extra_nfds, int timeout_ms, out int numfds);
+
+        [DllImport(LIBNAME, CallingConvention = CallingConvention.Cdecl)]
+        public static extern CURLMcode curlw_multi_wakeup(CURLMH multi_handle);
+
         [DllImport(LIBNAME, CallingConvention = CallingConvention.Cdecl, EntryPoint = "curlw_multi_strerror_imp")]
         private static extern IntPtr curlw_multi_strerror_imp(CURLMcode error);
 
@@ -567,6 +968,235 @@ namespace NativeBridge
 
         [DllImport(LIBNAME, CallingConvention = CallingConvention.Cdecl)]
         public static extern void curlw_slist_free_all(IntPtr list);
+
+        // --- misc / memory ---------------------------------------------------
+        // Frees memory allocated by libcurl (escape/url_get/get_handles results).
+        [DllImport(LIBNAME, CallingConvention = CallingConvention.Cdecl)]
+        public static extern void curlw_free(IntPtr p);
+
+        // --- easy: extra entry points ----------------------------------------
+        [DllImport(LIBNAME, CallingConvention = CallingConvention.Cdecl)]
+        public static extern CURLH curlw_easy_duphandle(CURLH handle);
+
+        [DllImport(LIBNAME, CallingConvention = CallingConvention.Cdecl)]
+        public static extern CURLcode curlw_easy_pause(CURLH handle, int action);
+
+        [DllImport(LIBNAME, CallingConvention = CallingConvention.Cdecl)]
+        public static extern CURLcode curlw_easy_upkeep(CURLH handle);
+
+        [DllImport(LIBNAME, CallingConvention = CallingConvention.Cdecl)]
+        public static extern CURLcode curlw_easy_recv(CURLH handle, [Out] byte[] buffer, UIntPtr buflen, out UIntPtr n);
+
+        [DllImport(LIBNAME, CallingConvention = CallingConvention.Cdecl)]
+        public static extern CURLcode curlw_easy_send(CURLH handle, byte[] buffer, UIntPtr buflen, out UIntPtr n);
+
+        // Returns a curl-allocated string; the managed wrapper copies it and frees
+        // the native buffer for you.
+        [DllImport(LIBNAME, CallingConvention = CallingConvention.Cdecl, EntryPoint = "curlw_easy_escape", CharSet = CharSet.Ansi)]
+        private static extern IntPtr curlw_easy_escape_imp(CURLH handle, string s, int length);
+
+        public static string curlw_easy_escape(CURLH handle, string s)
+        {
+            IntPtr p = curlw_easy_escape_imp(handle, s, 0); // 0 => strlen
+            if (p == IntPtr.Zero) return null;
+            string r = Marshal.PtrToStringAnsi(p);
+            curlw_free(p);
+            return r;
+        }
+
+        [DllImport(LIBNAME, CallingConvention = CallingConvention.Cdecl, EntryPoint = "curlw_easy_unescape", CharSet = CharSet.Ansi)]
+        private static extern IntPtr curlw_easy_unescape_imp(CURLH handle, string s, int inlength, out int outlength);
+
+        public static string curlw_easy_unescape(CURLH handle, string s)
+        {
+            IntPtr p = curlw_easy_unescape_imp(handle, s, 0, out int outlen);
+            if (p == IntPtr.Zero) return null;
+            string r = Marshal.PtrToStringAnsi(p, outlen);
+            curlw_free(p);
+            return r;
+        }
+
+        // --- version info (read via accessors) -------------------------------
+        [DllImport(LIBNAME, CallingConvention = CallingConvention.Cdecl)]
+        public static extern IntPtr curlw_version_info();
+
+        [DllImport(LIBNAME, CallingConvention = CallingConvention.Cdecl)]
+        public static extern int curlw_verinfo_features(IntPtr d);
+
+        [DllImport(LIBNAME, CallingConvention = CallingConvention.Cdecl)]
+        public static extern uint curlw_verinfo_version_num(IntPtr d);
+
+        [DllImport(LIBNAME, CallingConvention = CallingConvention.Cdecl, EntryPoint = "curlw_verinfo_version")]
+        private static extern IntPtr curlw_verinfo_version_imp(IntPtr d);
+        public static string curlw_verinfo_version(IntPtr d) => Marshal.PtrToStringAnsi(curlw_verinfo_version_imp(d));
+
+        [DllImport(LIBNAME, CallingConvention = CallingConvention.Cdecl, EntryPoint = "curlw_verinfo_ssl_version")]
+        private static extern IntPtr curlw_verinfo_ssl_version_imp(IntPtr d);
+        public static string curlw_verinfo_ssl_version(IntPtr d) => Marshal.PtrToStringAnsi(curlw_verinfo_ssl_version_imp(d));
+
+        [DllImport(LIBNAME, CallingConvention = CallingConvention.Cdecl, EntryPoint = "curlw_verinfo_libz_version")]
+        private static extern IntPtr curlw_verinfo_libz_version_imp(IntPtr d);
+        public static string curlw_verinfo_libz_version(IntPtr d) => Marshal.PtrToStringAnsi(curlw_verinfo_libz_version_imp(d));
+
+        [DllImport(LIBNAME, CallingConvention = CallingConvention.Cdecl, EntryPoint = "curlw_verinfo_nghttp2_version")]
+        private static extern IntPtr curlw_verinfo_nghttp2_version_imp(IntPtr d);
+        public static string curlw_verinfo_nghttp2_version(IntPtr d) => Marshal.PtrToStringAnsi(curlw_verinfo_nghttp2_version_imp(d));
+
+        [DllImport(LIBNAME, CallingConvention = CallingConvention.Cdecl, EntryPoint = "curlw_verinfo_quic_version")]
+        private static extern IntPtr curlw_verinfo_quic_version_imp(IntPtr d);
+        public static string curlw_verinfo_quic_version(IntPtr d) => Marshal.PtrToStringAnsi(curlw_verinfo_quic_version_imp(d));
+
+        [DllImport(LIBNAME, CallingConvention = CallingConvention.Cdecl, EntryPoint = "curlw_verinfo_cainfo")]
+        private static extern IntPtr curlw_verinfo_cainfo_imp(IntPtr d);
+        public static string curlw_verinfo_cainfo(IntPtr d) => Marshal.PtrToStringAnsi(curlw_verinfo_cainfo_imp(d));
+
+        [DllImport(LIBNAME, CallingConvention = CallingConvention.Cdecl, EntryPoint = "curlw_verinfo_capath")]
+        private static extern IntPtr curlw_verinfo_capath_imp(IntPtr d);
+        public static string curlw_verinfo_capath(IntPtr d) => Marshal.PtrToStringAnsi(curlw_verinfo_capath_imp(d));
+
+        // --- header API ------------------------------------------------------
+        [DllImport(LIBNAME, CallingConvention = CallingConvention.Cdecl, CharSet = CharSet.Ansi)]
+        public static extern CURLHcode curlw_easy_header(CURLH handle, string name, UIntPtr nameindex,
+                                                         uint origin, int request, out IntPtr hout);
+
+        [DllImport(LIBNAME, CallingConvention = CallingConvention.Cdecl)]
+        public static extern IntPtr curlw_easy_nextheader(CURLH handle, uint origin, int request, IntPtr prev);
+
+        [DllImport(LIBNAME, CallingConvention = CallingConvention.Cdecl, EntryPoint = "curlw_header_name")]
+        private static extern IntPtr curlw_header_name_imp(IntPtr h);
+        public static string curlw_header_name(IntPtr h) => Marshal.PtrToStringAnsi(curlw_header_name_imp(h));
+
+        [DllImport(LIBNAME, CallingConvention = CallingConvention.Cdecl, EntryPoint = "curlw_header_value")]
+        private static extern IntPtr curlw_header_value_imp(IntPtr h);
+        public static string curlw_header_value(IntPtr h) => Marshal.PtrToStringAnsi(curlw_header_value_imp(h));
+
+        [DllImport(LIBNAME, CallingConvention = CallingConvention.Cdecl)]
+        public static extern UIntPtr curlw_header_amount(IntPtr h);
+
+        [DllImport(LIBNAME, CallingConvention = CallingConvention.Cdecl)]
+        public static extern UIntPtr curlw_header_index(IntPtr h);
+
+        [DllImport(LIBNAME, CallingConvention = CallingConvention.Cdecl)]
+        public static extern uint curlw_header_origin(IntPtr h);
+
+        // --- share API -------------------------------------------------------
+        [DllImport(LIBNAME, CallingConvention = CallingConvention.Cdecl)]
+        public static extern IntPtr curlw_share_init();
+
+        [DllImport(LIBNAME, CallingConvention = CallingConvention.Cdecl)]
+        public static extern CURLSHcode curlw_share_cleanup(IntPtr share);
+
+        [DllImport(LIBNAME, CallingConvention = CallingConvention.Cdecl)]
+        public static extern CURLSHcode curlw_share_setopt_int(IntPtr share, CURLSHoption option, int value);
+
+        [DllImport(LIBNAME, CallingConvention = CallingConvention.Cdecl)]
+        public static extern CURLSHcode curlw_share_enable_default_locks(IntPtr share);
+
+        [DllImport(LIBNAME, CallingConvention = CallingConvention.Cdecl, EntryPoint = "curlw_share_strerror_imp")]
+        private static extern IntPtr curlw_share_strerror_imp(CURLSHcode error);
+        public static string curlw_share_strerror(CURLSHcode error) => Marshal.PtrToStringAnsi(curlw_share_strerror_imp(error));
+
+        // --- MIME ------------------------------------------------------------
+        [DllImport(LIBNAME, CallingConvention = CallingConvention.Cdecl)]
+        public static extern IntPtr curlw_mime_init(CURLH easy);
+
+        [DllImport(LIBNAME, CallingConvention = CallingConvention.Cdecl)]
+        public static extern void curlw_mime_free(IntPtr mime);
+
+        [DllImport(LIBNAME, CallingConvention = CallingConvention.Cdecl)]
+        public static extern IntPtr curlw_mime_addpart(IntPtr mime);
+
+        [DllImport(LIBNAME, CallingConvention = CallingConvention.Cdecl, CharSet = CharSet.Ansi)]
+        public static extern CURLcode curlw_mime_name(IntPtr part, string name);
+
+        // Pass the exact byte length as datasize. Do NOT pass UIntPtr.MaxValue
+        // (curl's CURL_ZERO_TERMINATED): with a byte[] the marshaller does not
+        // append a NUL, so curl's strlen() would read past the array. For NUL-
+        // terminated text use curlw_mime_data with the real length instead.
+        [DllImport(LIBNAME, CallingConvention = CallingConvention.Cdecl)]
+        public static extern CURLcode curlw_mime_data(IntPtr part, byte[] data, UIntPtr datasize);
+
+        [DllImport(LIBNAME, CallingConvention = CallingConvention.Cdecl, CharSet = CharSet.Ansi)]
+        public static extern CURLcode curlw_mime_filedata(IntPtr part, string filename);
+
+        [DllImport(LIBNAME, CallingConvention = CallingConvention.Cdecl, CharSet = CharSet.Ansi)]
+        public static extern CURLcode curlw_mime_filename(IntPtr part, string filename);
+
+        [DllImport(LIBNAME, CallingConvention = CallingConvention.Cdecl, CharSet = CharSet.Ansi)]
+        public static extern CURLcode curlw_mime_type(IntPtr part, string mimetype);
+
+        [DllImport(LIBNAME, CallingConvention = CallingConvention.Cdecl, CharSet = CharSet.Ansi)]
+        public static extern CURLcode curlw_mime_encoder(IntPtr part, string encoding);
+
+        [DllImport(LIBNAME, CallingConvention = CallingConvention.Cdecl)]
+        public static extern CURLcode curlw_mime_headers(IntPtr part, IntPtr headers, int take_ownership);
+
+        [DllImport(LIBNAME, CallingConvention = CallingConvention.Cdecl)]
+        public static extern CURLcode curlw_mime_subparts(IntPtr part, IntPtr subparts);
+
+        // --- URL API ---------------------------------------------------------
+        [DllImport(LIBNAME, CallingConvention = CallingConvention.Cdecl)]
+        public static extern IntPtr curlw_url();
+
+        [DllImport(LIBNAME, CallingConvention = CallingConvention.Cdecl)]
+        public static extern void curlw_url_cleanup(IntPtr handle);
+
+        [DllImport(LIBNAME, CallingConvention = CallingConvention.Cdecl)]
+        public static extern IntPtr curlw_url_dup(IntPtr input);
+
+        [DllImport(LIBNAME, CallingConvention = CallingConvention.Cdecl, EntryPoint = "curlw_url_get")]
+        private static extern CURLUcode curlw_url_get_imp(IntPtr handle, CURLUPart what, out IntPtr part, uint flags);
+
+        public static CURLUcode curlw_url_get(IntPtr handle, CURLUPart what, out string part, uint flags)
+        {
+            CURLUcode ec = curlw_url_get_imp(handle, what, out IntPtr p, flags);
+            part = (ec == CURLUcode.CURLUE_OK && p != IntPtr.Zero) ? Marshal.PtrToStringAnsi(p) : null;
+            if (p != IntPtr.Zero) curlw_free(p);
+            return ec;
+        }
+
+        [DllImport(LIBNAME, CallingConvention = CallingConvention.Cdecl, CharSet = CharSet.Ansi)]
+        public static extern CURLUcode curlw_url_set(IntPtr handle, CURLUPart what, string part, uint flags);
+
+        [DllImport(LIBNAME, CallingConvention = CallingConvention.Cdecl, EntryPoint = "curlw_url_strerror_imp")]
+        private static extern IntPtr curlw_url_strerror_imp(CURLUcode error);
+        public static string curlw_url_strerror(CURLUcode error) => Marshal.PtrToStringAnsi(curlw_url_strerror_imp(error));
+
+        // --- WebSocket -------------------------------------------------------
+        [DllImport(LIBNAME, CallingConvention = CallingConvention.Cdecl)]
+        public static extern CURLcode curlw_ws_recv(CURLH handle, [Out] byte[] buffer, UIntPtr buflen,
+                                                    out UIntPtr recv, out IntPtr meta);
+
+        [DllImport(LIBNAME, CallingConvention = CallingConvention.Cdecl)]
+        public static extern CURLcode curlw_ws_send(CURLH handle, byte[] buffer, UIntPtr buflen,
+                                                    out UIntPtr sent, long fragsize, uint flags);
+
+        [DllImport(LIBNAME, CallingConvention = CallingConvention.Cdecl)]
+        public static extern IntPtr curlw_ws_meta(CURLH handle);
+
+        [DllImport(LIBNAME, CallingConvention = CallingConvention.Cdecl)]
+        public static extern int curlw_wsframe_flags(IntPtr f);
+
+        [DllImport(LIBNAME, CallingConvention = CallingConvention.Cdecl)]
+        public static extern long curlw_wsframe_offset(IntPtr f);
+
+        [DllImport(LIBNAME, CallingConvention = CallingConvention.Cdecl)]
+        public static extern long curlw_wsframe_bytesleft(IntPtr f);
+
+        [DllImport(LIBNAME, CallingConvention = CallingConvention.Cdecl)]
+        public static extern UIntPtr curlw_wsframe_len(IntPtr f);
+
+        // --- multi: event-driven extensions ----------------------------------
+        [DllImport(LIBNAME, CallingConvention = CallingConvention.Cdecl)]
+        public static extern CURLMcode curlw_multi_assign(CURLMH multi_handle, IntPtr sockfd, IntPtr sockp);
+
+        [DllImport(LIBNAME, CallingConvention = CallingConvention.Cdecl)]
+        public static extern CURLMcode curlw_multi_socket_action(CURLMH multi_handle, IntPtr s,
+                                                                 int ev_bitmask, out int running_handles);
+
+        // Returns a curl-allocated, NULL-terminated CURL* array; free with curlw_free.
+        [DllImport(LIBNAME, CallingConvention = CallingConvention.Cdecl)]
+        public static extern IntPtr curlw_multi_get_handles(CURLMH multi_handle);
     }
 }
 #endif // !UNITY_WEBGL
