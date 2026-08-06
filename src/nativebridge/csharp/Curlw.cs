@@ -204,6 +204,10 @@ namespace NativeBridgeF
         CURLOPT_SSLCERT_BLOB          = CURLDefines.CURLOPTTYPE_BLOB + 291,
         CURLOPT_SSLKEY_BLOB           = CURLDefines.CURLOPTTYPE_BLOB + 292,
         CURLOPT_PROXY_CAINFO_BLOB     = CURLDefines.CURLOPTTYPE_BLOB + 310,
+
+        // Attaches a CURLSH* (from curlw_share_init) so this handle uses shared
+        // caches (DNS/connection/TLS-session/...). Set via curlw_easy_setopt_pointer.
+        CURLOPT_SHARE                 = CURLDefines.CURLOPTTYPE_OBJECTPOINT + 100,
     }
 
     // https://curl.se/libcurl/c/CURLOPT_HTTP_VERSION.html
