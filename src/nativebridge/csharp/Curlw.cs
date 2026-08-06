@@ -11,7 +11,7 @@
 // variants; this file exposes them to Unity.
 //
 // Design notes:
-//   * namespace NativeBridge, LIBNAME "NativeBridge".
+//   * namespace NativeBridgeF, LIBNAME "NativeBridge" (native library file name).
 //   * CURLMsg is read via curlw_msg_* accessors, not a mirrored struct layout.
 //   * setopt long vs off_t are distinct (curlw_easy_setopt_long / _offt).
 //

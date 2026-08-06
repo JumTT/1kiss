@@ -1,6 +1,6 @@
 {
-  "name": "NativeBridge",
-  "rootNamespace": "NativeBridge",
+  "name": "NativeBridgeF",
+  "rootNamespace": "NativeBridgeF",
   "references": [],
   "includePlatforms": [],
   "excludePlatforms": [],
