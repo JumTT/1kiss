@@ -7,6 +7,13 @@
 //   * callback trampolines use curl's official function-pointer types.
 //   * setopt long vs off_t split into explicit variants (see curlw.h).
 //   * CURLMsg fields exposed via accessor functions (no C# struct-layout ABI).
+
+// Prevent <windows.h> (pulled in by winsock2.h / curl.h on Win32) from defining
+// min/max as function-like macros, which would break std::numeric_limits::min/max
+// with C4003/C2589. Must come before any header that includes windows.h.
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
 #include "curlw.h"
 
 #include <atomic>
