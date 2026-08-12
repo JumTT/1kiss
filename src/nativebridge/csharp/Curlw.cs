@@ -96,8 +96,14 @@ namespace NativeBridgeF
         public const long CURLAUTH_DIGEST = (1L << 1);
         public const long CURLAUTH_NEGOTIATE = (1L << 2);
         public const long CURLAUTH_NTLM = (1L << 3);
+        public const long CURLAUTH_DIGEST_IE = (1L << 4);
         public const long CURLAUTH_BEARER = (1L << 6);
-        public const long CURLAUTH_ANY = ~0L;
+        // libcurl defines CURLAUTH_ANY as ~CURLAUTH_DIGEST_IE (all bits except bit 4).
+        // We narrow to a 32-bit mask so the value fits Win64's 32-bit native `long`
+        // via curlw_try_native_long's unsigned-32 allowance. curl 8.x keeps every
+        // auth bit within bit 0..6, so this covers all defined methods; revisit if
+        // libcurl ever introduces auth bits above bit 31.
+        public const long CURLAUTH_ANY = 0xffffffffL & ~CURLAUTH_DIGEST_IE;
     }
 
     /// <summary>
@@ -726,7 +732,9 @@ namespace NativeBridgeF
             return Marshal.PtrToStringAnsi(curlw_easy_strerror_imp(error));
         }
 
-        // setopt: typed variants (curl_easy_setopt is variadic; do NOT P/Invoke it directly)
+        // setopt: typed variants (curl_easy_setopt is variadic; do NOT P/Invoke it directly).
+        // Native code validates the CURLOPTTYPE class of the option; within OBJECTPOINT
+        // (string vs opaque pointer) discrimination relies on the C# type system.
         [DllImport(LIBNAME, CallingConvention = CallingConvention.Cdecl)]
         public static extern CURLcode curlw_easy_setopt_int(CURLH handle, CURLoption option, int optval);
 
@@ -837,7 +845,7 @@ namespace NativeBridgeF
         [DllImport(LIBNAME, CallingConvention = CallingConvention.Cdecl, CharSet = CharSet.Ansi)]
         public static extern CURLcode curlw_easy_setopt_string(CURLH handle, CURLoption option, string optval);
 
-        // getinfo: typed variants
+        // getinfo: typed variants. Native code validates the CURLINFO type mask.
         [DllImport(LIBNAME, CallingConvention = CallingConvention.Cdecl)]
         public static extern CURLcode curlw_easy_getinfo_int(CURLH handle, CURLINFO info, out int outval);
 
@@ -1090,6 +1098,7 @@ namespace NativeBridgeF
         [DllImport(LIBNAME, CallingConvention = CallingConvention.Cdecl)]
         public static extern CURLSHcode curlw_share_cleanup(IntPtr share);
 
+        // Only CURLSHOPT_SHARE / CURLSHOPT_UNSHARE are valid here.
         [DllImport(LIBNAME, CallingConvention = CallingConvention.Cdecl)]
         public static extern CURLSHcode curlw_share_setopt_int(IntPtr share, CURLSHoption option, int value);
 

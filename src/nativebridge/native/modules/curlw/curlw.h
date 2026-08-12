@@ -40,7 +40,8 @@ NATIVEBRIDGE_API int      NATIVEBRIDGE_CALL curlw_close_socket(intptr_t sockfd);
 NATIVEBRIDGE_API int      NATIVEBRIDGE_CALL curlw_errno(void);
 
 // --- global init / cleanup ---------------------------------------------------
-// max_fd_set sizes the internal fd_set object pool chunk.
+// max_fd_set sizes the internal fd_set object pool chunk on the first successful
+// init. Calls are reference-counted; pair each successful init with cleanup.
 NATIVEBRIDGE_API CURLcode NATIVEBRIDGE_CALL curlw_global_init(int flags, unsigned int max_fd_set);
 NATIVEBRIDGE_API void     NATIVEBRIDGE_CALL curlw_global_cleanup(void);
 
@@ -65,10 +66,15 @@ NATIVEBRIDGE_API const char* NATIVEBRIDGE_CALL curlw_easy_strerror_imp(CURLcode 
 //              that matches C#'s always-64-bit `long`), then narrowed to curl's
 //              native `long` inside. Using a plain C `long` here would be 32-bit
 //              on Win64 (LLP64) yet 64-bit in C#, so the marshalled argument
-//              widths would disagree — hence the explicit int64_t.
+//              widths would disagree — hence the explicit int64_t. Out-of-range
+//              values are rejected except for documented unsigned 32-bit masks.
 //   _offt   -> CURLOPTTYPE_OFF_T options (curl_off_t, 64-bit)
-//   _pointer/_string -> pointer/string options
+//   _pointer -> object/callback/function options
+//   _string  -> object/string options
 // NOTE: the reference binding conflated _long with off_t; here they are split.
+// The native side validates the CURLOPTTYPE class of each option; discrimination
+// inside the OBJECTPOINT class (string vs opaque pointer) relies on the managed
+// side's type system (`string` vs `IntPtr`/delegate).
 NATIVEBRIDGE_API CURLcode NATIVEBRIDGE_CALL curlw_easy_setopt_int(CURL* handle, CURLoption option, int optval);
 NATIVEBRIDGE_API CURLcode NATIVEBRIDGE_CALL curlw_easy_setopt_long(CURL* handle, CURLoption option, int64_t optval);
 NATIVEBRIDGE_API CURLcode NATIVEBRIDGE_CALL curlw_easy_setopt_offt(CURL* handle, CURLoption option, int64_t optval);
@@ -80,7 +86,8 @@ NATIVEBRIDGE_API CURLcode NATIVEBRIDGE_CALL curlw_easy_setopt_string(CURL* handl
 NATIVEBRIDGE_API CURLcode NATIVEBRIDGE_CALL curlw_easy_setopt_blob(CURL* handle, CURLoption option,
                                                                   void* data, size_t len, unsigned int flags);
 
-// getinfo: typed variants.
+// getinfo: typed variants. Passing an info value to the wrong typed entry point
+// or passing a null output pointer returns CURLE_BAD_FUNCTION_ARGUMENT.
 NATIVEBRIDGE_API CURLcode NATIVEBRIDGE_CALL curlw_easy_getinfo_int(CURL* handle, CURLINFO info, int* outval);
 NATIVEBRIDGE_API CURLcode NATIVEBRIDGE_CALL curlw_easy_getinfo_long(CURL* handle, CURLINFO info, int64_t* outval);
 NATIVEBRIDGE_API CURLcode NATIVEBRIDGE_CALL curlw_easy_getinfo_double(CURL* handle, CURLINFO info, double* outval);
@@ -184,10 +191,12 @@ NATIVEBRIDGE_API unsigned int NATIVEBRIDGE_CALL curlw_header_origin(const struct
 // Shares DNS / connection / TLS-session / cookie / HSTS / Alt-Svc caches across
 // easy handles. Attach to an easy handle via CURLOPT_SHARE (setopt_pointer).
 // For multi-threaded use call curlw_share_enable_default_locks: it installs an
-// internal mutex-based lock/unlock so the share is thread-safe without the caller
-// implementing lock callbacks.
+// independent per-share mutex set so the share is thread-safe without the caller
+// implementing lock callbacks. curlw_share_cleanup releases that lock context
+// after libcurl successfully cleans up the share.
 NATIVEBRIDGE_API CURLSH*     NATIVEBRIDGE_CALL curlw_share_init(void);
 NATIVEBRIDGE_API CURLSHcode  NATIVEBRIDGE_CALL curlw_share_cleanup(CURLSH* share);
+// Only CURLSHOPT_SHARE / CURLSHOPT_UNSHARE are accepted by this typed entry point.
 NATIVEBRIDGE_API CURLSHcode  NATIVEBRIDGE_CALL curlw_share_setopt_int(CURLSH* share, CURLSHoption option, int value);
 NATIVEBRIDGE_API CURLSHcode  NATIVEBRIDGE_CALL curlw_share_enable_default_locks(CURLSH* share);
 NATIVEBRIDGE_API const char* NATIVEBRIDGE_CALL curlw_share_strerror_imp(CURLSHcode error);
