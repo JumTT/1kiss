@@ -1,0 +1,80 @@
+use std::env;
+use std::path::Path;
+
+fn link_lib_path(target_os: &str, lib_path: &str) {
+    let p = Path::new(lib_path);
+    if !p.exists() {
+        eprintln!("cargo:warning=Library path does not exist: {}", lib_path);
+        return;
+    }
+    if let Some(parent) = p.parent() {
+        println!("cargo:rustc-link-search=native={}", parent.display());
+    }
+    let stem = p.file_stem().unwrap().to_string_lossy();
+    let lib_name = if target_os == "windows" {
+        stem.trim_end_matches(".lib").to_string()
+    } else {
+        stem.trim_start_matches("lib").to_string()
+    };
+    println!("cargo:rustc-link-lib=static={}", lib_name);
+}
+
+fn main() {
+    let target_os = env::var("CARGO_CFG_TARGET_OS").unwrap();
+    println!("cargo:rustc-cfg=rust_nativebridge");
+
+    let nb_libs_order = [
+        ("NB_CURL_LIBRARY", "curl"),
+        ("NB_NGTCP2_LIBRARY", "ngtcp2"),
+        ("NB_NGTCP2_CRYPTO_LIBRARY", "ngtcp2_crypto_boringssl"),
+        ("NB_NGHTTP3_LIBRARY", "nghttp3"),
+        ("NB_NGHTTP2_LIBRARY", "nghttp2"),
+        ("NB_SSL_LIBRARY", "ssl"),
+        ("NB_CRYPTO_LIBRARY", "crypto"),
+        ("NB_ZLIB_LIBRARY", "z"),
+    ];
+
+    for (env_var, fallback_name) in &nb_libs_order {
+        if let Ok(lib_path) = env::var(env_var) {
+            if !lib_path.is_empty() {
+                link_lib_path(&target_os, &lib_path);
+                continue;
+            }
+        }
+        println!("cargo:rustc-link-lib=static={}", fallback_name);
+    }
+
+    if let Ok(extra_dirs) = env::var("NB_LIB_DIRS") {
+        for dir in extra_dirs.split(|c| c == ';' || c == ':').filter(|s| !s.is_empty()) {
+            println!("cargo:rustc-link-search=native={}", dir);
+        }
+    }
+
+    match target_os.as_str() {
+        "windows" => {
+            println!("cargo:rustc-link-lib=ws2_32");
+            println!("cargo:rustc-link-lib=crypt32");
+            println!("cargo:rustc-link-lib=bcrypt");
+            println!("cargo:rustc-link-lib=iphlpapi");
+            println!("cargo:rustc-link-lib=secur32");
+            println!("cargo:rustc-link-lib=advapi32");
+            println!("cargo:rustc-link-lib=user32");
+            println!("cargo:rustc-link-lib=gdi32");
+            println!("cargo:rustc-link-lib=wldap32");
+            println!("cargo:rustc-link-lib=normaliz");
+        }
+        "linux" => {
+            println!("cargo:rustc-link-lib=pthread");
+            println!("cargo:rustc-link-lib=dl");
+        }
+        "android" => {
+            println!("cargo:rustc-link-lib=log");
+            println!("cargo:rustc-link-lib=android");
+        }
+        "macos" | "ios" | "tvos" => {
+            println!("cargo:rustc-link-lib=framework=CoreFoundation");
+            println!("cargo:rustc-link-lib=framework=SystemConfiguration");
+        }
+        _ => {}
+    }
+}

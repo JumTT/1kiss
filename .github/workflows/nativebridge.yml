@@ -22,7 +22,7 @@ env:
   # Full dependency chain + the local nativebridge module (built last).
   NB_LIBS: 'zlib,boringssl,nghttp3,ngtcp2,nghttp2,curl,nativebridge'
   # Cache key hash inputs: anything that changes the compiled artifacts. Includes
-  # src/nativebridge/native/** (the CMakeLists + curlw/nativebridge C/C++ sources)
+  # src/nativebridge/** (build scripts, Cargo.toml, build.rs, Rust sources)
   # so editing them invalidates the cache and forces a rebuild. The `nb-` prefix
   # keeps this cache independent from build.yml's `1kbuild-` cache — critical
   # because NATIVEBRIDGE=1 produces STATIC Windows libs (curl/zlib), a different
@@ -43,7 +43,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ./${{ env.INSTALL_PATH }}
-          key: nbbuild-${{ env.INSTALL_PATH }}-${{ hashFiles('build.ps1', '1k/**', 'src/**/build.yml', 'src/**/patch1.ps1', 'src/**/*.patch', 'src/**/rel1.ps1', 'src/**/build1.ps1', 'src/**/install1.ps1', 'src/**/clean1.ps1', 'src/nativebridge/native/**') }}
+          key: nbbuild-${{ env.INSTALL_PATH }}-${{ hashFiles('build.ps1', '1k/**', 'src/**/build.yml', 'src/**/patch1.ps1', 'src/**/*.patch', 'src/**/rel1.ps1', 'src/**/build1.ps1', 'src/**/install1.ps1', 'src/**/clean1.ps1', 'src/nativebridge/**') }}
       - name: Build
         shell: pwsh
         run: .\build.ps1 -p win32 -a $env:BUILD_ARCH -libs $env:NB_LIBS
@@ -63,7 +63,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ./${{ env.INSTALL_PATH }}
-          key: nbbuild-${{ env.INSTALL_PATH }}-${{ hashFiles('build.ps1', '1k/**', 'src/**/build.yml', 'src/**/patch1.ps1', 'src/**/*.patch', 'src/**/rel1.ps1', 'src/**/build1.ps1', 'src/**/install1.ps1', 'src/**/clean1.ps1', 'src/nativebridge/native/**') }}
+          key: nbbuild-${{ env.INSTALL_PATH }}-${{ hashFiles('build.ps1', '1k/**', 'src/**/build.yml', 'src/**/patch1.ps1', 'src/**/*.patch', 'src/**/rel1.ps1', 'src/**/build1.ps1', 'src/**/install1.ps1', 'src/**/clean1.ps1', 'src/nativebridge/**') }}
       - name: Build
         shell: pwsh
         run: .\build.ps1 -p win32 -a arm64 -libs $env:NB_LIBS
@@ -91,7 +91,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ./${{ env.INSTALL_PATH }}
-          key: nbbuild-${{ env.INSTALL_PATH }}-${{ hashFiles('build.ps1', '1k/**', 'src/**/build.yml', 'src/**/patch1.ps1', 'src/**/*.patch', 'src/**/rel1.ps1', 'src/**/build1.ps1', 'src/**/install1.ps1', 'src/**/clean1.ps1', 'src/nativebridge/native/**') }}
+          key: nbbuild-${{ env.INSTALL_PATH }}-${{ hashFiles('build.ps1', '1k/**', 'src/**/build.yml', 'src/**/patch1.ps1', 'src/**/*.patch', 'src/**/rel1.ps1', 'src/**/build1.ps1', 'src/**/install1.ps1', 'src/**/clean1.ps1', 'src/nativebridge/**') }}
       - name: Build
         shell: pwsh
         run: ./build.ps1 -p linux -a $env:BUILD_ARCH -libs $env:NB_LIBS
@@ -115,7 +115,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ./${{ env.INSTALL_PATH }}
-          key: nbbuild-${{ env.INSTALL_PATH }}-${{ hashFiles('build.ps1', '1k/**', 'src/**/build.yml', 'src/**/patch1.ps1', 'src/**/*.patch', 'src/**/rel1.ps1', 'src/**/build1.ps1', 'src/**/install1.ps1', 'src/**/clean1.ps1', 'src/nativebridge/native/**') }}
+          key: nbbuild-${{ env.INSTALL_PATH }}-${{ hashFiles('build.ps1', '1k/**', 'src/**/build.yml', 'src/**/patch1.ps1', 'src/**/*.patch', 'src/**/rel1.ps1', 'src/**/build1.ps1', 'src/**/install1.ps1', 'src/**/clean1.ps1', 'src/nativebridge/**') }}
       - name: Setup NDK
         shell: pwsh
         run: ./1k/1kiss.ps1 -p android -a $env:BUILD_ARCH -setupOnly -ndkOnly
@@ -146,7 +146,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ./${{ env.INSTALL_PATH }}
-          key: nbbuild-${{ env.INSTALL_PATH }}-${{ hashFiles('build.ps1', '1k/**', 'src/**/build.yml', 'src/**/patch1.ps1', 'src/**/*.patch', 'src/**/rel1.ps1', 'src/**/build1.ps1', 'src/**/install1.ps1', 'src/**/clean1.ps1', 'src/nativebridge/native/**') }}
+          key: nbbuild-${{ env.INSTALL_PATH }}-${{ hashFiles('build.ps1', '1k/**', 'src/**/build.yml', 'src/**/patch1.ps1', 'src/**/*.patch', 'src/**/rel1.ps1', 'src/**/build1.ps1', 'src/**/install1.ps1', 'src/**/clean1.ps1', 'src/nativebridge/**') }}
       - name: Setup Python
         uses: actions/setup-python@v5
         with:
@@ -174,7 +174,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ./${{ env.INSTALL_PATH }}
-          key: nbbuild-${{ env.INSTALL_PATH }}-${{ hashFiles('build.ps1', '1k/**', 'src/**/build.yml', 'src/**/patch1.ps1', 'src/**/*.patch', 'src/**/rel1.ps1', 'src/**/build1.ps1', 'src/**/install1.ps1', 'src/**/clean1.ps1', 'src/nativebridge/native/**') }}
+          key: nbbuild-${{ env.INSTALL_PATH }}-${{ hashFiles('build.ps1', '1k/**', 'src/**/build.yml', 'src/**/patch1.ps1', 'src/**/*.patch', 'src/**/rel1.ps1', 'src/**/build1.ps1', 'src/**/install1.ps1', 'src/**/clean1.ps1', 'src/nativebridge/**') }}
       - name: Setup Xcode version
         uses: maxim-lobanov/setup-xcode@v1
         with:
@@ -202,7 +202,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ./${{ env.INSTALL_PATH }}
-          key: nbbuild-${{ env.INSTALL_PATH }}-${{ hashFiles('build.ps1', '1k/**', 'src/**/build.yml', 'src/**/patch1.ps1', 'src/**/*.patch', 'src/**/rel1.ps1', 'src/**/build1.ps1', 'src/**/install1.ps1', 'src/**/clean1.ps1', 'src/nativebridge/native/**') }}
+          key: nbbuild-${{ env.INSTALL_PATH }}-${{ hashFiles('build.ps1', '1k/**', 'src/**/build.yml', 'src/**/patch1.ps1', 'src/**/*.patch', 'src/**/rel1.ps1', 'src/**/build1.ps1', 'src/**/install1.ps1', 'src/**/clean1.ps1', 'src/nativebridge/**') }}
       - name: Setup Xcode version
         uses: maxim-lobanov/setup-xcode@v1
         with:
@@ -234,7 +234,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ./${{ env.INSTALL_PATH }}
-          key: nbbuild-${{ env.INSTALL_PATH }}-${{ hashFiles('build.ps1', '1k/**', 'src/**/build.yml', 'src/**/patch1.ps1', 'src/**/*.patch', 'src/**/rel1.ps1', 'src/**/build1.ps1', 'src/**/install1.ps1', 'src/**/clean1.ps1', 'src/nativebridge/native/**') }}
+          key: nbbuild-${{ env.INSTALL_PATH }}-${{ hashFiles('build.ps1', '1k/**', 'src/**/build.yml', 'src/**/patch1.ps1', 'src/**/*.patch', 'src/**/rel1.ps1', 'src/**/build1.ps1', 'src/**/install1.ps1', 'src/**/clean1.ps1', 'src/nativebridge/**') }}
       - name: Setup Xcode version
         uses: maxim-lobanov/setup-xcode@v1
         with:
@@ -262,7 +262,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ./${{ env.INSTALL_PATH }}
-          key: nbbuild-${{ env.INSTALL_PATH }}-${{ hashFiles('build.ps1', '1k/**', 'src/**/build.yml', 'src/**/patch1.ps1', 'src/**/*.patch', 'src/**/rel1.ps1', 'src/**/build1.ps1', 'src/**/install1.ps1', 'src/**/clean1.ps1', 'src/nativebridge/native/**') }}
+          key: nbbuild-${{ env.INSTALL_PATH }}-${{ hashFiles('build.ps1', '1k/**', 'src/**/build.yml', 'src/**/patch1.ps1', 'src/**/*.patch', 'src/**/rel1.ps1', 'src/**/build1.ps1', 'src/**/install1.ps1', 'src/**/clean1.ps1', 'src/nativebridge/**') }}
       - name: Setup Xcode version
         uses: maxim-lobanov/setup-xcode@v1
         with:
