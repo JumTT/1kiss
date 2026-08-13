@@ -513,7 +513,28 @@ extern "C" {
     pub fn socket(af: c_int, socktype: c_int, protocol: c_int) -> c_int;
     pub fn close(fd: c_int) -> c_int;
     pub fn shutdown(s: c_int, how: c_int) -> c_int;
-    pub fn __errno_location() -> *mut c_int;
+}
+
+#[cfg(any(target_os = "linux", target_os = "android"))]
+extern "C" {
+    fn __errno_location() -> *mut c_int;
+}
+
+#[cfg(any(target_os = "macos", target_os = "ios", target_os = "tvos"))]
+extern "C" {
+    fn __error() -> *mut c_int;
+}
+
+#[inline]
+unsafe fn errno_ptr() -> *mut c_int {
+    #[cfg(any(target_os = "linux", target_os = "android"))]
+    {
+        __errno_location()
+    }
+    #[cfg(any(target_os = "macos", target_os = "ios", target_os = "tvos"))]
+    {
+        __error()
+    }
 }
 
 extern "C" {
@@ -1097,7 +1118,7 @@ unsafe fn set_socket_timeout_errno() {
     }
     #[cfg(not(windows))]
     {
-        *__errno_location() = SOCKET_TIMED_OUT;
+        *errno_ptr() = SOCKET_TIMED_OUT;
     }
 }
 
@@ -1109,7 +1130,7 @@ unsafe fn get_socket_errno() -> c_int {
     }
     #[cfg(not(windows))]
     {
-        *__errno_location()
+        *errno_ptr()
     }
 }
 

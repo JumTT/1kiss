@@ -66,14 +66,18 @@ fn main() {
         "linux" => {
             println!("cargo:rustc-link-lib=pthread");
             println!("cargo:rustc-link-lib=dl");
+            println!("cargo:rustc-link-lib=m");
+            println!("cargo:rustc-link-lib=stdc++");
         }
         "android" => {
             println!("cargo:rustc-link-lib=log");
             println!("cargo:rustc-link-lib=android");
+            println!("cargo:rustc-link-lib=c++");
         }
         "macos" | "ios" | "tvos" => {
             println!("cargo:rustc-link-lib=framework=CoreFoundation");
             println!("cargo:rustc-link-lib=framework=SystemConfiguration");
+            println!("cargo:rustc-link-lib=c++");
         }
         _ => {}
     }
