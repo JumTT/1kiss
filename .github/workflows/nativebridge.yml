@@ -33,11 +33,17 @@ jobs:
       INSTALL_PATH: install_win32_${{ matrix.arch }}
     steps:
       - uses: actions/checkout@v6
-      - name: Cache build artifacts
+      - name: Cache dependency libraries
         uses: actions/cache@v4
         with:
+          # Cache ONLY the C dependency libs (zlib, boringssl, nghttp3, ngtcp2,
+          # nghttp2, curl). nativebridge itself is always rebuilt (see the
+          # "Force nativebridge rebuild" step below), so the key hashes only the
+          # inputs that affect those deps. Editing nativebridge sources keeps the
+          # key stable -> the cached deps are restored and build.ps1 skips them
+          # (via each lib's _1kiss version sentry) instead of recompiling.
           path: ./${{ env.INSTALL_PATH }}
-          key: nbbuild-${{ env.INSTALL_PATH }}-${{ hashFiles('build.ps1', '1k/**', 'src/**/build.yml', 'src/**/patch1.ps1', 'src/**/*.patch', 'src/**/build1.ps1', 'src/**/install1.ps1', 'src/**/clean1.ps1', 'src/nativebridge/rust/Cargo.toml', 'src/nativebridge/rust/build.rs', 'src/nativebridge/rust/src/**') }}
+          key: nbdeps-${{ env.INSTALL_PATH }}-${{ hashFiles('build.ps1', '1k/**', 'src/zlib/**', 'src/boringssl/**', 'src/nghttp3/**', 'src/ngtcp2/**', 'src/nghttp2/**', 'src/curl/**') }}
       - name: Cache Cargo registry
         uses: actions/cache@v4
         with:
@@ -47,6 +53,9 @@ jobs:
           key: nbcargo-${{ runner.os }}-${{ hashFiles('src/nativebridge/rust/Cargo.toml') }}
           restore-keys: |
             nbcargo-${{ runner.os }}-
+      - name: Force nativebridge rebuild (keep cached deps)
+        shell: pwsh
+        run: Remove-Item -Recurse -Force -ErrorAction SilentlyContinue "./${{ env.INSTALL_PATH }}/nativebridge"
       - name: Build
         shell: pwsh
         run: .\build.ps1 -p win32 -a $env:BUILD_ARCH -libs $env:NB_LIBS
@@ -62,11 +71,17 @@ jobs:
       INSTALL_PATH: install_win32_arm64
     steps:
       - uses: actions/checkout@v6
-      - name: Cache build artifacts
+      - name: Cache dependency libraries
         uses: actions/cache@v4
         with:
+          # Cache ONLY the C dependency libs (zlib, boringssl, nghttp3, ngtcp2,
+          # nghttp2, curl). nativebridge itself is always rebuilt (see the
+          # "Force nativebridge rebuild" step below), so the key hashes only the
+          # inputs that affect those deps. Editing nativebridge sources keeps the
+          # key stable -> the cached deps are restored and build.ps1 skips them
+          # (via each lib's _1kiss version sentry) instead of recompiling.
           path: ./${{ env.INSTALL_PATH }}
-          key: nbbuild-${{ env.INSTALL_PATH }}-${{ hashFiles('build.ps1', '1k/**', 'src/**/build.yml', 'src/**/patch1.ps1', 'src/**/*.patch', 'src/**/build1.ps1', 'src/**/install1.ps1', 'src/**/clean1.ps1', 'src/nativebridge/rust/Cargo.toml', 'src/nativebridge/rust/build.rs', 'src/nativebridge/rust/src/**') }}
+          key: nbdeps-${{ env.INSTALL_PATH }}-${{ hashFiles('build.ps1', '1k/**', 'src/zlib/**', 'src/boringssl/**', 'src/nghttp3/**', 'src/ngtcp2/**', 'src/nghttp2/**', 'src/curl/**') }}
       - name: Cache Cargo registry
         uses: actions/cache@v4
         with:
@@ -76,6 +91,9 @@ jobs:
           key: nbcargo-${{ runner.os }}-${{ hashFiles('src/nativebridge/rust/Cargo.toml') }}
           restore-keys: |
             nbcargo-${{ runner.os }}-
+      - name: Force nativebridge rebuild (keep cached deps)
+        shell: pwsh
+        run: Remove-Item -Recurse -Force -ErrorAction SilentlyContinue "./${{ env.INSTALL_PATH }}/nativebridge"
       - name: Build
         shell: pwsh
         run: .\build.ps1 -p win32 -a arm64 -libs $env:NB_LIBS
@@ -99,11 +117,17 @@ jobs:
       INSTALL_PATH: install_linux_${{ matrix.arch }}
     steps:
       - uses: actions/checkout@v6
-      - name: Cache build artifacts
+      - name: Cache dependency libraries
         uses: actions/cache@v4
         with:
+          # Cache ONLY the C dependency libs (zlib, boringssl, nghttp3, ngtcp2,
+          # nghttp2, curl). nativebridge itself is always rebuilt (see the
+          # "Force nativebridge rebuild" step below), so the key hashes only the
+          # inputs that affect those deps. Editing nativebridge sources keeps the
+          # key stable -> the cached deps are restored and build.ps1 skips them
+          # (via each lib's _1kiss version sentry) instead of recompiling.
           path: ./${{ env.INSTALL_PATH }}
-          key: nbbuild-${{ env.INSTALL_PATH }}-${{ hashFiles('build.ps1', '1k/**', 'src/**/build.yml', 'src/**/patch1.ps1', 'src/**/*.patch', 'src/**/build1.ps1', 'src/**/install1.ps1', 'src/**/clean1.ps1', 'src/nativebridge/rust/Cargo.toml', 'src/nativebridge/rust/build.rs', 'src/nativebridge/rust/src/**') }}
+          key: nbdeps-${{ env.INSTALL_PATH }}-${{ hashFiles('build.ps1', '1k/**', 'src/zlib/**', 'src/boringssl/**', 'src/nghttp3/**', 'src/ngtcp2/**', 'src/nghttp2/**', 'src/curl/**') }}
       - name: Cache Cargo registry
         uses: actions/cache@v4
         with:
@@ -113,6 +137,9 @@ jobs:
           key: nbcargo-${{ runner.os }}-${{ hashFiles('src/nativebridge/rust/Cargo.toml') }}
           restore-keys: |
             nbcargo-${{ runner.os }}-
+      - name: Force nativebridge rebuild (keep cached deps)
+        shell: pwsh
+        run: Remove-Item -Recurse -Force -ErrorAction SilentlyContinue "./${{ env.INSTALL_PATH }}/nativebridge"
       - name: Build
         shell: pwsh
         run: ./build.ps1 -p linux -a $env:BUILD_ARCH -libs $env:NB_LIBS
@@ -132,11 +159,17 @@ jobs:
       INSTALL_PATH: install_android_${{ matrix.arch }}
     steps:
       - uses: actions/checkout@v6
-      - name: Cache build artifacts
+      - name: Cache dependency libraries
         uses: actions/cache@v4
         with:
+          # Cache ONLY the C dependency libs (zlib, boringssl, nghttp3, ngtcp2,
+          # nghttp2, curl). nativebridge itself is always rebuilt (see the
+          # "Force nativebridge rebuild" step below), so the key hashes only the
+          # inputs that affect those deps. Editing nativebridge sources keeps the
+          # key stable -> the cached deps are restored and build.ps1 skips them
+          # (via each lib's _1kiss version sentry) instead of recompiling.
           path: ./${{ env.INSTALL_PATH }}
-          key: nbbuild-${{ env.INSTALL_PATH }}-${{ hashFiles('build.ps1', '1k/**', 'src/**/build.yml', 'src/**/patch1.ps1', 'src/**/*.patch', 'src/**/build1.ps1', 'src/**/install1.ps1', 'src/**/clean1.ps1', 'src/nativebridge/rust/Cargo.toml', 'src/nativebridge/rust/build.rs', 'src/nativebridge/rust/src/**') }}
+          key: nbdeps-${{ env.INSTALL_PATH }}-${{ hashFiles('build.ps1', '1k/**', 'src/zlib/**', 'src/boringssl/**', 'src/nghttp3/**', 'src/ngtcp2/**', 'src/nghttp2/**', 'src/curl/**') }}
       - name: Cache Cargo registry
         uses: actions/cache@v4
         with:
@@ -149,6 +182,9 @@ jobs:
       - name: Setup NDK
         shell: pwsh
         run: ./1k/1kiss.ps1 -p android -a $env:BUILD_ARCH -setupOnly -ndkOnly
+      - name: Force nativebridge rebuild (keep cached deps)
+        shell: pwsh
+        run: Remove-Item -Recurse -Force -ErrorAction SilentlyContinue "./${{ env.INSTALL_PATH }}/nativebridge"
       - name: Build
         shell: pwsh
         run: ./build.ps1 -p android -a $env:BUILD_ARCH -libs $env:NB_LIBS
@@ -172,11 +208,17 @@ jobs:
       INSTALL_PATH: install_osx_${{ matrix.arch }}
     steps:
       - uses: actions/checkout@v6
-      - name: Cache build artifacts
+      - name: Cache dependency libraries
         uses: actions/cache@v4
         with:
+          # Cache ONLY the C dependency libs (zlib, boringssl, nghttp3, ngtcp2,
+          # nghttp2, curl). nativebridge itself is always rebuilt (see the
+          # "Force nativebridge rebuild" step below), so the key hashes only the
+          # inputs that affect those deps. Editing nativebridge sources keeps the
+          # key stable -> the cached deps are restored and build.ps1 skips them
+          # (via each lib's _1kiss version sentry) instead of recompiling.
           path: ./${{ env.INSTALL_PATH }}
-          key: nbbuild-${{ env.INSTALL_PATH }}-${{ hashFiles('build.ps1', '1k/**', 'src/**/build.yml', 'src/**/patch1.ps1', 'src/**/*.patch', 'src/**/build1.ps1', 'src/**/install1.ps1', 'src/**/clean1.ps1', 'src/nativebridge/rust/Cargo.toml', 'src/nativebridge/rust/build.rs', 'src/nativebridge/rust/src/**') }}
+          key: nbdeps-${{ env.INSTALL_PATH }}-${{ hashFiles('build.ps1', '1k/**', 'src/zlib/**', 'src/boringssl/**', 'src/nghttp3/**', 'src/ngtcp2/**', 'src/nghttp2/**', 'src/curl/**') }}
       - name: Cache Cargo registry
         uses: actions/cache@v4
         with:
@@ -190,6 +232,9 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: '3.10'
+      - name: Force nativebridge rebuild (keep cached deps)
+        shell: pwsh
+        run: Remove-Item -Recurse -Force -ErrorAction SilentlyContinue "./${{ env.INSTALL_PATH }}/nativebridge"
       - name: Build
         shell: pwsh
         run: ./build.ps1 -p osx -a $env:BUILD_ARCH -libs $env:NB_LIBS
@@ -209,11 +254,17 @@ jobs:
       INSTALL_PATH: install_ios_${{ matrix.arch }}
     steps:
       - uses: actions/checkout@v6
-      - name: Cache build artifacts
+      - name: Cache dependency libraries
         uses: actions/cache@v4
         with:
+          # Cache ONLY the C dependency libs (zlib, boringssl, nghttp3, ngtcp2,
+          # nghttp2, curl). nativebridge itself is always rebuilt (see the
+          # "Force nativebridge rebuild" step below), so the key hashes only the
+          # inputs that affect those deps. Editing nativebridge sources keeps the
+          # key stable -> the cached deps are restored and build.ps1 skips them
+          # (via each lib's _1kiss version sentry) instead of recompiling.
           path: ./${{ env.INSTALL_PATH }}
-          key: nbbuild-${{ env.INSTALL_PATH }}-${{ hashFiles('build.ps1', '1k/**', 'src/**/build.yml', 'src/**/patch1.ps1', 'src/**/*.patch', 'src/**/build1.ps1', 'src/**/install1.ps1', 'src/**/clean1.ps1', 'src/nativebridge/rust/Cargo.toml', 'src/nativebridge/rust/build.rs', 'src/nativebridge/rust/src/**') }}
+          key: nbdeps-${{ env.INSTALL_PATH }}-${{ hashFiles('build.ps1', '1k/**', 'src/zlib/**', 'src/boringssl/**', 'src/nghttp3/**', 'src/ngtcp2/**', 'src/nghttp2/**', 'src/curl/**') }}
       - name: Cache Cargo registry
         uses: actions/cache@v4
         with:
@@ -231,6 +282,9 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: '3.10'
+      - name: Force nativebridge rebuild (keep cached deps)
+        shell: pwsh
+        run: Remove-Item -Recurse -Force -ErrorAction SilentlyContinue "./${{ env.INSTALL_PATH }}/nativebridge"
       - name: Build
         shell: pwsh
         run: ./build.ps1 -p ios -a $env:BUILD_ARCH -libs $env:NB_LIBS
@@ -246,11 +300,17 @@ jobs:
       INSTALL_PATH: install_ios_arm64_sim
     steps:
       - uses: actions/checkout@v6
-      - name: Cache build artifacts
+      - name: Cache dependency libraries
         uses: actions/cache@v4
         with:
+          # Cache ONLY the C dependency libs (zlib, boringssl, nghttp3, ngtcp2,
+          # nghttp2, curl). nativebridge itself is always rebuilt (see the
+          # "Force nativebridge rebuild" step below), so the key hashes only the
+          # inputs that affect those deps. Editing nativebridge sources keeps the
+          # key stable -> the cached deps are restored and build.ps1 skips them
+          # (via each lib's _1kiss version sentry) instead of recompiling.
           path: ./${{ env.INSTALL_PATH }}
-          key: nbbuild-${{ env.INSTALL_PATH }}-${{ hashFiles('build.ps1', '1k/**', 'src/**/build.yml', 'src/**/patch1.ps1', 'src/**/*.patch', 'src/**/build1.ps1', 'src/**/install1.ps1', 'src/**/clean1.ps1', 'src/nativebridge/rust/Cargo.toml', 'src/nativebridge/rust/build.rs', 'src/nativebridge/rust/src/**') }}
+          key: nbdeps-${{ env.INSTALL_PATH }}-${{ hashFiles('build.ps1', '1k/**', 'src/zlib/**', 'src/boringssl/**', 'src/nghttp3/**', 'src/ngtcp2/**', 'src/nghttp2/**', 'src/curl/**') }}
       - name: Cache Cargo registry
         uses: actions/cache@v4
         with:
@@ -268,6 +328,9 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: '3.10'
+      - name: Force nativebridge rebuild (keep cached deps)
+        shell: pwsh
+        run: Remove-Item -Recurse -Force -ErrorAction SilentlyContinue "./${{ env.INSTALL_PATH }}/nativebridge"
       - name: Build
         shell: pwsh
         run: ./build.ps1 -p ios -a arm64 -sdk simulator -libs $env:NB_LIBS
@@ -287,11 +350,17 @@ jobs:
       INSTALL_PATH: install_tvos_${{ matrix.arch }}
     steps:
       - uses: actions/checkout@v6
-      - name: Cache build artifacts
+      - name: Cache dependency libraries
         uses: actions/cache@v4
         with:
+          # Cache ONLY the C dependency libs (zlib, boringssl, nghttp3, ngtcp2,
+          # nghttp2, curl). nativebridge itself is always rebuilt (see the
+          # "Force nativebridge rebuild" step below), so the key hashes only the
+          # inputs that affect those deps. Editing nativebridge sources keeps the
+          # key stable -> the cached deps are restored and build.ps1 skips them
+          # (via each lib's _1kiss version sentry) instead of recompiling.
           path: ./${{ env.INSTALL_PATH }}
-          key: nbbuild-${{ env.INSTALL_PATH }}-${{ hashFiles('build.ps1', '1k/**', 'src/**/build.yml', 'src/**/patch1.ps1', 'src/**/*.patch', 'src/**/build1.ps1', 'src/**/install1.ps1', 'src/**/clean1.ps1', 'src/nativebridge/rust/Cargo.toml', 'src/nativebridge/rust/build.rs', 'src/nativebridge/rust/src/**') }}
+          key: nbdeps-${{ env.INSTALL_PATH }}-${{ hashFiles('build.ps1', '1k/**', 'src/zlib/**', 'src/boringssl/**', 'src/nghttp3/**', 'src/ngtcp2/**', 'src/nghttp2/**', 'src/curl/**') }}
       - name: Cache Cargo registry
         uses: actions/cache@v4
         with:
@@ -309,6 +378,9 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: '3.10'
+      - name: Force nativebridge rebuild (keep cached deps)
+        shell: pwsh
+        run: Remove-Item -Recurse -Force -ErrorAction SilentlyContinue "./${{ env.INSTALL_PATH }}/nativebridge"
       - name: Build
         shell: pwsh
         run: ./build.ps1 -p tvos -a $env:BUILD_ARCH -libs $env:NB_LIBS
@@ -324,11 +396,17 @@ jobs:
       INSTALL_PATH: install_tvos_arm64_sim
     steps:
       - uses: actions/checkout@v6
-      - name: Cache build artifacts
+      - name: Cache dependency libraries
         uses: actions/cache@v4
         with:
+          # Cache ONLY the C dependency libs (zlib, boringssl, nghttp3, ngtcp2,
+          # nghttp2, curl). nativebridge itself is always rebuilt (see the
+          # "Force nativebridge rebuild" step below), so the key hashes only the
+          # inputs that affect those deps. Editing nativebridge sources keeps the
+          # key stable -> the cached deps are restored and build.ps1 skips them
+          # (via each lib's _1kiss version sentry) instead of recompiling.
           path: ./${{ env.INSTALL_PATH }}
-          key: nbbuild-${{ env.INSTALL_PATH }}-${{ hashFiles('build.ps1', '1k/**', 'src/**/build.yml', 'src/**/patch1.ps1', 'src/**/*.patch', 'src/**/build1.ps1', 'src/**/install1.ps1', 'src/**/clean1.ps1', 'src/nativebridge/rust/Cargo.toml', 'src/nativebridge/rust/build.rs', 'src/nativebridge/rust/src/**') }}
+          key: nbdeps-${{ env.INSTALL_PATH }}-${{ hashFiles('build.ps1', '1k/**', 'src/zlib/**', 'src/boringssl/**', 'src/nghttp3/**', 'src/ngtcp2/**', 'src/nghttp2/**', 'src/curl/**') }}
       - name: Cache Cargo registry
         uses: actions/cache@v4
         with:
@@ -346,6 +424,9 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: '3.10'
+      - name: Force nativebridge rebuild (keep cached deps)
+        shell: pwsh
+        run: Remove-Item -Recurse -Force -ErrorAction SilentlyContinue "./${{ env.INSTALL_PATH }}/nativebridge"
       - name: Build
         shell: pwsh
         run: ./build.ps1 -p tvos -a arm64 -sdk simulator -libs $env:NB_LIBS

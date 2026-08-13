@@ -13,6 +13,12 @@ function fail($msg) { throw "nativebridge build: $msg" }
 Write-Host "nativebridge build1: target_os=$target_os target_cpu=$target_cpu"
 Write-Host "  install_dir=$install_dir"
 
+# The 1k build system tracks a single "apple embedded simulator" flag
+# ($Global:is_ios_sim, set in 1k/1kiss.ps1 from -sdk simulator or an x64 arch)
+# that is true for BOTH iOS and tvOS simulator builds; there is no separate
+# is_tvos_sim. Reuse this one flag for every apple embedded target.
+$is_apple_sim = [bool]$Global:is_ios_sim
+
 $rust_target = $null
 if ($target_os -eq 'win32') {
     if ($target_cpu -eq 'x64' -or $target_cpu -eq 'amd64') {
@@ -43,7 +49,7 @@ if ($target_os -eq 'win32') {
         $rust_target = 'aarch64-apple-darwin'
     } else { fail "unsupported osx cpu: $target_cpu" }
 } elseif ($target_os -eq 'ios') {
-    if ($Global:is_ios_sim) {
+    if ($is_apple_sim) {
         if ($target_cpu -eq 'arm64') {
             $rust_target = 'aarch64-apple-ios-sim'
         } elseif ($target_cpu -eq 'x64') {
@@ -55,7 +61,7 @@ if ($target_os -eq 'win32') {
         } else { fail "ios device only supports arm64, got: $target_cpu" }
     }
 } elseif ($target_os -eq 'tvos') {
-    if ($Global:is_tvos_sim) {
+    if ($is_apple_sim) {
         if ($target_cpu -eq 'arm64') {
             $rust_target = 'aarch64-apple-tvos-sim'
         } elseif ($target_cpu -eq 'x64') {
@@ -120,6 +126,72 @@ $env:NB_LIB_DIRS = @(
 Write-Host "  NB_CURL_LIBRARY=$env:NB_CURL_LIBRARY"
 Write-Host "  NB_SSL_LIBRARY=$env:NB_SSL_LIBRARY"
 Write-Host "  NB_NGHTTP2_LIBRARY=$env:NB_NGHTTP2_LIBRARY"
+
+if ($target_os -eq 'android') {
+    # Rust must link Android targets with the NDK's per-API clang driver, not the
+    # host `cc`. Otherwise the final link fails with e.g.
+    #   ld: error: unable to find library -llog / -landroid / -lc++ / -lunwind
+    # because the host linker has no NDK sysroot. active_ndk_toolchain() (from
+    # build.ps1) put the NDK bin dir on PATH and exposed $env:ANDROID_NDK_BIN;
+    # $Global:android_api_level carries the per-arch API level.
+    if (-not $env:ANDROID_NDK_BIN) { fail 'ANDROID_NDK_BIN not set (NDK toolchain not activated)' }
+    $api = $Global:android_api_level
+    if (-not $api) { fail 'android_api_level not set' }
+    $clang_prefix = switch ($target_cpu) {
+        'arm64' { 'aarch64-linux-android' }
+        'armv7' { 'armv7a-linux-androideabi' }
+        'x86' { 'i686-linux-android' }
+        'x64' { 'x86_64-linux-android' }
+        default { fail "unsupported android cpu: $target_cpu" }
+    }
+    $clang_name = "$clang_prefix$api-clang"
+    if ($IsWindows) { $clang_name = "$clang_name.cmd" }
+    $android_linker = Join-Path $env:ANDROID_NDK_BIN $clang_name
+    if (-not (Test-Path $android_linker -PathType Leaf)) { fail "android linker not found: $android_linker" }
+    # cargo derives this var name from the target triple (upper-cased, '-' -> '_').
+    $linker_var = 'CARGO_TARGET_' + ($rust_target.ToUpper() -replace '-', '_') + '_LINKER'
+    Set-Item -Path "env:$linker_var" -Value $android_linker
+    Write-Host "  android_linker=$android_linker ($linker_var)"
+}
+elseif ($target_os -eq 'ios' -or $target_os -eq 'tvos' -or $target_os -eq 'watchos') {
+    # The dependency C libraries (curl, boringssl, ...) are compiled by
+    # 1k/ios.cmake with a specific deployment target (tvOS=15.0, iOS=11/12,
+    # watchOS=8.0). Rust's builtin apple targets otherwise default to a much
+    # older min-OS (e.g. tvOS 10.0), so the final link picks the wrong platform
+    # stub of libSystem and fails, e.g.:
+    #   Undefined symbols: ___chkstk_darwin   (referenced by tvOS 15 objects)
+    # Force rustc to link with the SAME min-OS via *_DEPLOYMENT_TARGET, mirroring
+    # 1k/ios.cmake (honoring an explicit -minsdk override when present).
+    $deploy = $Global:target_minsdk
+    if (-not $deploy) {
+        if ($target_os -eq 'ios') {
+            if ($target_cpu -eq 'armv7') {
+                $deploy = '10.0'
+            }
+            else {
+                $xcv = ($Global:XCODE_VERSION -replace '[^0-9.].*$', '') -split '\.'
+                $xc_major = [int]$xcv[0]
+                $xc_minor = if ($xcv.Count -gt 1) { [int]$xcv[1] } else { 0 }
+                # xcode 14.3+ requires iOS 12.0 (c++ std::get); older uses 11.0.
+                $deploy = if (($xc_major -gt 14) -or ($xc_major -eq 14 -and $xc_minor -ge 3)) { '12.0' } else { '11.0' }
+            }
+        }
+        elseif ($target_os -eq 'tvos') {
+            $deploy = '15.0'
+        }
+        elseif ($target_os -eq 'watchos') {
+            $deploy = '8.0'
+        }
+    }
+    if ($deploy) {
+        switch ($target_os) {
+            'ios' { $env:IPHONEOS_DEPLOYMENT_TARGET = $deploy }
+            'tvos' { $env:TVOS_DEPLOYMENT_TARGET = $deploy }
+            'watchos' { $env:WATCHOS_DEPLOYMENT_TARGET = $deploy }
+        }
+        Write-Host "  deployment_target=$deploy"
+    }
+}
 
 Write-Host "nativebridge build1: running cargo build --release --target $rust_target"
 cargo build --release --target $rust_target

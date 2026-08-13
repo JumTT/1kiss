@@ -7,6 +7,7 @@
 
 use libc::{c_char, c_double, c_int, c_long, c_uint, c_void, intptr_t, size_t};
 use std::collections::HashMap;
+use std::ffi::{CStr, CString};
 use std::mem;
 use std::ptr;
 use std::sync::atomic::{AtomicPtr, Ordering};
@@ -20,8 +21,11 @@ pub type CURLU = c_void;
 pub type curl_mime = c_void;
 pub type curl_mimepart = c_void;
 
+// Windows SOCKET is UINT_PTR (pointer-width): 64-bit on x64. Must match the real
+// winsock/curl type, otherwise fd_set / curl_waitfd / CURLINFO_SOCKET writes
+// overflow the storage on 64-bit Windows.
 #[cfg(windows)]
-pub type curl_socket_t = libc::c_uint;
+pub type curl_socket_t = usize;
 #[cfg(not(windows))]
 pub type curl_socket_t = c_int;
 
@@ -262,7 +266,7 @@ pub const CURLINFO_CONTENT_LENGTH_UPLOAD_T: CURLINFO = CURLINFO_OFF_T + 0x36;
 pub const CURLINFO_EFFECTIVE_METHOD: CURLINFO = CURLINFO_STRING + 0x42;
 pub const CURLINFO_XFER_ID: CURLINFO = CURLINFO_OFF_T + 0x45;
 pub const CURLINFO_CONN_ID: CURLINFO = CURLINFO_OFF_T + 0x46;
-pub const CURLINFO_TLS_SSL_PTR: CURLINFO = 0x400000 + 0x2b;
+pub const CURLINFO_TLS_SSL_PTR: CURLINFO = 0x400000 + 0x3d;
 
 pub const CURLMOPT_SOCKETFUNCTION: CURLMoption = opt_func!(1);
 pub const CURLMOPT_SOCKETDATA: CURLMoption = opt_obj!(2);
@@ -372,7 +376,10 @@ pub type c_short = i16;
 pub struct CURLMsg {
     pub msg: CURLMSG,
     pub easy_handle: *mut CURL,
-    pub data: [u8; 64],
+    // Proxy for curl's `union { void *whatever; CURLcode result; }`. Only read
+    // through a curl-owned pointer, and only offset 0 (the CURLcode result) is
+    // accessed, so a pointer-sized byte blob preserving the field offset suffices.
+    pub data: [u8; 8],
 }
 
 impl CURLMsg {
@@ -388,6 +395,10 @@ pub struct curl_blob {
     pub flags: c_uint,
 }
 
+// Layout mirrors curl's `curl_version_info_data` and MUST match the exact libcurl
+// version linked in — curl appends fields across releases and the curlw_verinfo_*
+// accessors read fields by offset. Re-check this (and the hand-mirrored CURLMsg /
+// curl_header / curl_ws_frame structs) whenever the bundled curl is bumped.
 #[repr(C)]
 pub struct curl_version_info_data {
     pub age: CURLversion,
@@ -525,6 +536,11 @@ extern "C" {
     fn __error() -> *mut c_int;
 }
 
+#[cfg(windows)]
+extern "C" {
+    fn _errno() -> *mut c_int;
+}
+
 #[inline]
 unsafe fn errno_ptr() -> *mut c_int {
     #[cfg(any(target_os = "linux", target_os = "android"))]
@@ -534,6 +550,10 @@ unsafe fn errno_ptr() -> *mut c_int {
     #[cfg(any(target_os = "macos", target_os = "ios", target_os = "tvos"))]
     {
         __error()
+    }
+    #[cfg(windows)]
+    {
+        _errno()
     }
 }
 
@@ -614,7 +634,7 @@ extern "C" {
     pub fn curl_mime_free(mime: *mut curl_mime);
     pub fn curl_mime_addpart(mime: *mut curl_mime) -> *mut curl_mimepart;
     pub fn curl_mime_name(part: *mut curl_mimepart, name: *const c_char) -> CURLcode;
-    pub fn curl_mime_data(part: *mut curl_mimepart, data: *const c_char, datasize: isize) -> CURLcode;
+    pub fn curl_mime_data(part: *mut curl_mimepart, data: *const c_char, datasize: size_t) -> CURLcode;
     pub fn curl_mime_filedata(part: *mut curl_mimepart, filename: *const c_char) -> CURLcode;
     pub fn curl_mime_filename(part: *mut curl_mimepart, filename: *const c_char) -> CURLcode;
     pub fn curl_mime_type(part: *mut curl_mimepart, mimetype: *const c_char) -> CURLcode;
@@ -662,77 +682,69 @@ extern "C" {
     pub fn curl_ws_meta(handle: *mut CURL) -> *const curl_ws_frame;
 }
 
-type curl_easy_setopt_long_t = unsafe extern "C" fn(*mut CURL, CURLoption, c_long) -> CURLcode;
-type curl_easy_setopt_offt_t = unsafe extern "C" fn(*mut CURL, CURLoption, curl_off_t) -> CURLcode;
-type curl_easy_setopt_ptr_t = unsafe extern "C" fn(*mut CURL, CURLoption, *mut c_void) -> CURLcode;
-type curl_easy_getinfo_long_t = unsafe extern "C" fn(*mut CURL, CURLINFO, *mut c_long) -> CURLcode;
-type curl_easy_getinfo_double_t = unsafe extern "C" fn(*mut CURL, CURLINFO, *mut c_double) -> CURLcode;
-type curl_easy_getinfo_ptr_t = unsafe extern "C" fn(*mut CURL, CURLINFO, *mut c_void) -> CURLcode;
-type curl_easy_getinfo_offt_t = unsafe extern "C" fn(*mut CURL, CURLINFO, *mut curl_off_t) -> CURLcode;
-type curl_multi_setopt_long_t = unsafe extern "C" fn(*mut CURLM, CURLMoption, c_long) -> CURLMcode;
-type curl_multi_setopt_offt_t = unsafe extern "C" fn(*mut CURLM, CURLMoption, curl_off_t) -> CURLMcode;
-type curl_multi_setopt_ptr_t = unsafe extern "C" fn(*mut CURLM, CURLMoption, *mut c_void) -> CURLMcode;
-type curl_share_setopt_int_t = unsafe extern "C" fn(*mut CURLSH, CURLSHoption, c_int) -> CURLSHcode;
-type curl_share_setopt_ptr_t = unsafe extern "C" fn(*mut CURLSH, CURLSHoption, *mut c_void) -> CURLSHcode;
-
+// libcurl's setopt/getinfo are C variadic functions. Call them directly rather
+// than transmuting to a fixed-arity fn pointer: on the Apple arm64 ABI variadic
+// arguments are passed on the stack, so a fixed-arity call would place them in
+// registers and libcurl would read garbage. A direct variadic call lets the
+// compiler honor each target's varargs convention.
 #[inline(always)]
 unsafe fn curl_easy_setopt_long(handle: *mut CURL, option: CURLoption, value: c_long) -> CURLcode {
-    mem::transmute::<unsafe extern "C" fn(*mut CURL, CURLoption, ...) -> CURLcode, curl_easy_setopt_long_t>(curl_easy_setopt)(handle, option, value)
+    curl_easy_setopt(handle, option, value)
 }
 
 #[inline(always)]
 unsafe fn curl_easy_setopt_offt(handle: *mut CURL, option: CURLoption, value: curl_off_t) -> CURLcode {
-    mem::transmute::<unsafe extern "C" fn(*mut CURL, CURLoption, ...) -> CURLcode, curl_easy_setopt_offt_t>(curl_easy_setopt)(handle, option, value)
+    curl_easy_setopt(handle, option, value)
 }
 
 #[inline(always)]
 unsafe fn curl_easy_setopt_ptr(handle: *mut CURL, option: CURLoption, value: *mut c_void) -> CURLcode {
-    mem::transmute::<unsafe extern "C" fn(*mut CURL, CURLoption, ...) -> CURLcode, curl_easy_setopt_ptr_t>(curl_easy_setopt)(handle, option, value)
+    curl_easy_setopt(handle, option, value)
 }
 
 #[inline(always)]
 unsafe fn curl_easy_getinfo_long(handle: *mut CURL, info: CURLINFO, value: *mut c_long) -> CURLcode {
-    mem::transmute::<unsafe extern "C" fn(*mut CURL, CURLINFO, ...) -> CURLcode, curl_easy_getinfo_long_t>(curl_easy_getinfo)(handle, info, value)
+    curl_easy_getinfo(handle, info, value)
 }
 
 #[inline(always)]
 unsafe fn curl_easy_getinfo_double(handle: *mut CURL, info: CURLINFO, value: *mut c_double) -> CURLcode {
-    mem::transmute::<unsafe extern "C" fn(*mut CURL, CURLINFO, ...) -> CURLcode, curl_easy_getinfo_double_t>(curl_easy_getinfo)(handle, info, value)
+    curl_easy_getinfo(handle, info, value)
 }
 
 #[inline(always)]
 unsafe fn curl_easy_getinfo_ptr(handle: *mut CURL, info: CURLINFO, value: *mut c_void) -> CURLcode {
-    mem::transmute::<unsafe extern "C" fn(*mut CURL, CURLINFO, ...) -> CURLcode, curl_easy_getinfo_ptr_t>(curl_easy_getinfo)(handle, info, value)
+    curl_easy_getinfo(handle, info, value)
 }
 
 #[inline(always)]
 unsafe fn curl_easy_getinfo_offt(handle: *mut CURL, info: CURLINFO, value: *mut curl_off_t) -> CURLcode {
-    mem::transmute::<unsafe extern "C" fn(*mut CURL, CURLINFO, ...) -> CURLcode, curl_easy_getinfo_offt_t>(curl_easy_getinfo)(handle, info, value)
+    curl_easy_getinfo(handle, info, value)
 }
 
 #[inline(always)]
 unsafe fn curl_multi_setopt_long(handle: *mut CURLM, option: CURLMoption, value: c_long) -> CURLMcode {
-    mem::transmute::<unsafe extern "C" fn(*mut CURLM, CURLMoption, ...) -> CURLMcode, curl_multi_setopt_long_t>(curl_multi_setopt)(handle, option, value)
+    curl_multi_setopt(handle, option, value)
 }
 
 #[inline(always)]
 unsafe fn curl_multi_setopt_offt(handle: *mut CURLM, option: CURLMoption, value: curl_off_t) -> CURLMcode {
-    mem::transmute::<unsafe extern "C" fn(*mut CURLM, CURLMoption, ...) -> CURLMcode, curl_multi_setopt_offt_t>(curl_multi_setopt)(handle, option, value)
+    curl_multi_setopt(handle, option, value)
 }
 
 #[inline(always)]
 unsafe fn curl_multi_setopt_ptr(handle: *mut CURLM, option: CURLMoption, value: *mut c_void) -> CURLMcode {
-    mem::transmute::<unsafe extern "C" fn(*mut CURLM, CURLMoption, ...) -> CURLMcode, curl_multi_setopt_ptr_t>(curl_multi_setopt)(handle, option, value)
+    curl_multi_setopt(handle, option, value)
 }
 
 #[inline(always)]
 unsafe fn curl_share_setopt_int(sh: *mut CURLSH, opt: CURLSHoption, value: c_int) -> CURLSHcode {
-    mem::transmute::<unsafe extern "C" fn(*mut CURLSH, CURLSHoption, ...) -> CURLSHcode, curl_share_setopt_int_t>(curl_share_setopt)(sh, opt, value)
+    curl_share_setopt(sh, opt, value)
 }
 
 #[inline(always)]
 unsafe fn curl_share_setopt_ptr(sh: *mut CURLSH, opt: CURLSHoption, value: *mut c_void) -> CURLSHcode {
-    mem::transmute::<unsafe extern "C" fn(*mut CURLSH, CURLSHoption, ...) -> CURLSHcode, curl_share_setopt_ptr_t>(curl_share_setopt)(sh, opt, value)
+    curl_share_setopt(sh, opt, value)
 }
 
 unsafe fn fd_zero(set: *mut fd_set) {
@@ -914,7 +926,6 @@ unsafe impl Sync for FdSetPool {}
 static GLOBAL_MTX: OnceLock<Mutex<()>> = OnceLock::new();
 static G_INIT_COUNT: OnceLock<Mutex<usize>> = OnceLock::new();
 static G_FD_POOL: AtomicPtr<FdSetPool> = AtomicPtr::new(ptr::null_mut());
-static G_SHARE_LOCKS_MTX: OnceLock<Mutex<()>> = OnceLock::new();
 static G_SHARE_LOCKS: OnceLock<Mutex<HashMap<usize, Box<ShareLockSet>>>> = OnceLock::new();
 
 fn global_mtx() -> &'static Mutex<()> {
@@ -923,10 +934,6 @@ fn global_mtx() -> &'static Mutex<()> {
 
 fn init_count() -> &'static Mutex<usize> {
     G_INIT_COUNT.get_or_init(|| Mutex::new(0))
-}
-
-fn share_locks_mtx() -> &'static Mutex<()> {
-    G_SHARE_LOCKS_MTX.get_or_init(|| Mutex::new(()))
 }
 
 fn share_locks() -> &'static Mutex<HashMap<usize, Box<ShareLockSet>>> {
@@ -1148,7 +1155,36 @@ fn get_eintr_errno() -> c_int {
 
 #[no_mangle]
 pub unsafe extern "C" fn nativebridge_version() -> *const c_char {
-    b"1.0.0-rust\0".as_ptr() as *const c_char
+    // Built once into 'static storage; mirrors nativebridge.cpp's runtime string
+    // "NativeBridge <ver> [curlw] (curl X, ssl Y, nghttp2 Z)". curl is always
+    // linked into the Rust lib, so the [curlw] variant is always emitted.
+    static VERSION: OnceLock<CString> = OnceLock::new();
+    VERSION
+        .get_or_init(|| {
+            let field = |p: *const c_char| -> String {
+                if p.is_null() {
+                    "?".to_string()
+                } else {
+                    unsafe { CStr::from_ptr(p) }.to_string_lossy().into_owned()
+                }
+            };
+            let v = unsafe { curl_version_info(CURLVERSION_NOW) };
+            let (curl_v, ssl_v, h2_v) = if v.is_null() {
+                ("?".to_string(), "?".to_string(), "?".to_string())
+            } else {
+                let d = unsafe { &*v };
+                (field(d.version), field(d.ssl_version), field(d.nghttp2_version))
+            };
+            let s = format!(
+                "NativeBridge {} [curlw] (curl {}, ssl {}, nghttp2 {})",
+                env!("CARGO_PKG_VERSION"),
+                curl_v,
+                ssl_v,
+                h2_v
+            );
+            CString::new(s).unwrap_or_else(|_| CString::new("NativeBridge").unwrap())
+        })
+        .as_ptr() as *const c_char
 }
 
 #[no_mangle]
@@ -1213,8 +1249,16 @@ pub unsafe extern "C" fn curlw_global_init(flags: c_int, max_fd_set: c_uint) -> 
 
     let mut count = init_count().lock().unwrap();
     if *count == 0 {
-        let pool = Box::new(FdSetPool::new(max_fd_set as usize));
-        let raw = Box::into_raw(pool);
+        // Fallible allocation so a pool OOM surfaces as CURLE_OUT_OF_MEMORY like
+        // the C impl (Box::new would abort under panic=abort). Freed with
+        // Box::from_raw in curlw_global_cleanup — same global-allocator Layout.
+        let layout = std::alloc::Layout::new::<FdSetPool>();
+        let raw = std::alloc::alloc(layout) as *mut FdSetPool;
+        if raw.is_null() {
+            curl_global_cleanup();
+            return CURLE_OUT_OF_MEMORY;
+        }
+        ptr::write(raw, FdSetPool::new(max_fd_set as usize));
         G_FD_POOL.store(raw, Ordering::Release);
     }
     *count += 1;
@@ -1249,9 +1293,9 @@ pub unsafe extern "C" fn curlw_socket_allocfds() -> *mut fd_set {
     if pool.is_null() {
         return ptr::null_mut();
     }
-    let p = (*pool).allocate();
-    ptr::write_bytes(p, 0, 1);
-    p
+    // Match the C impl: hand back the pooled slot as-is (fresh chunks are already
+    // zero-initialized). Callers zero it via curlw_socket_zerofds before use.
+    (*pool).allocate()
 }
 
 #[no_mangle]
@@ -1529,8 +1573,10 @@ pub unsafe extern "C" fn curlw_easy_getinfo_pointer(
         return ec;
     }
     if t == CURLINFO_SOCKET {
+        // CURLINFO_SOCKET yields a curl_socket_t; hand curl a correctly-typed
+        // pointer so it writes exactly that width (no c_long aliasing).
         let mut tmp: curl_socket_t = CURL_SOCKET_BAD;
-        let ec = curl_easy_getinfo_long(handle, info, &mut tmp as *mut curl_socket_t as *mut c_long);
+        let ec = curl_easy_getinfo(handle, info, &mut tmp as *mut curl_socket_t);
         if ec == CURLE_OK {
             *outval = tmp as usize as *mut c_void;
         }
@@ -1966,15 +2012,14 @@ pub unsafe extern "C" fn curlw_share_init() -> *mut CURLSH {
 
 #[no_mangle]
 pub unsafe extern "C" fn curlw_share_cleanup(share: *mut CURLSH) -> CURLSHcode {
-    if share.is_null() {
-        return CURLSHE_INVALID;
-    }
+    // Hold the map lock across cleanup + erase so the lock context can't be seen
+    // out of sync with libcurl's view of the share (matches the C impl). A null
+    // share is handled by curl_share_cleanup, which returns CURLSHE_INVALID.
     let key = share as usize;
+    let mut map = share_locks().lock().unwrap();
     let ec = curl_share_cleanup(share);
     if ec == CURLSHE_OK {
-        let _lk = share_locks_mtx().lock().unwrap();
-        let g = share_locks();
-        g.lock().unwrap().remove(&key);
+        map.remove(&key);
     }
     ec
 }
@@ -1997,19 +2042,17 @@ pub unsafe extern "C" fn curlw_share_enable_default_locks(share: *mut CURLSH) ->
         return CURLSHE_INVALID;
     }
     let key = share as usize;
-    let lock_set_ptr;
-    {
-        let _lk = share_locks_mtx().lock().unwrap();
-        let g = share_locks();
-        let mut map = g.lock().unwrap();
-        if map.contains_key(&key) {
-            return CURLSHE_OK;
-        }
-        let ls = ShareLockSet::new();
-        let ptr = &*ls as *const ShareLockSet as *mut c_void;
-        map.insert(key, ls);
-        lock_set_ptr = ptr;
+    // Hold the map lock across the whole install (insert + setopt + rollback) so a
+    // concurrent enable/cleanup can't race the callbacks (matches the C impl).
+    // curl_share_setopt only stores the callbacks; it never invokes them, and the
+    // callbacks take the per-share locks, not this map lock, so there is no reentry.
+    let mut map = share_locks().lock().unwrap();
+    if map.contains_key(&key) {
+        return CURLSHE_OK;
     }
+    let ls = ShareLockSet::new();
+    let lock_set_ptr = &*ls as *const ShareLockSet as *mut c_void;
+    map.insert(key, ls);
 
     let mut ec = curl_share_setopt_ptr(share, CURLSHOPT_USERDATA, lock_set_ptr);
     if ec == CURLSHE_OK {
@@ -2020,9 +2063,7 @@ pub unsafe extern "C" fn curlw_share_enable_default_locks(share: *mut CURLSH) ->
     }
 
     if ec != CURLSHE_OK {
-        let _lk = share_locks_mtx().lock().unwrap();
-        let g = share_locks();
-        g.lock().unwrap().remove(&key);
+        map.remove(&key);
         curl_share_setopt_ptr(share, CURLSHOPT_LOCKFUNC, ptr::null_mut());
         curl_share_setopt_ptr(share, CURLSHOPT_UNLOCKFUNC, ptr::null_mut());
         curl_share_setopt_ptr(share, CURLSHOPT_USERDATA, ptr::null_mut());
@@ -2061,7 +2102,7 @@ pub unsafe extern "C" fn curlw_mime_data(
     data: *const c_char,
     datasize: size_t,
 ) -> CURLcode {
-    curl_mime_data(part, data, datasize as isize)
+    curl_mime_data(part, data, datasize)
 }
 
 #[no_mangle]
