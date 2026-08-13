@@ -21,12 +21,6 @@ env:
   NATIVEBRIDGE: '1'
   # Full dependency chain + the local nativebridge module (built last).
   NB_LIBS: 'zlib,boringssl,nghttp3,ngtcp2,nghttp2,curl,nativebridge'
-  # Cache key hash inputs: anything that changes the compiled artifacts. Includes
-  # src/nativebridge/** (build scripts, Cargo.toml, build.rs, Rust sources)
-  # so editing them invalidates the cache and forces a rebuild. The `nb-` prefix
-  # keeps this cache independent from build.yml's `1kbuild-` cache — critical
-  # because NATIVEBRIDGE=1 produces STATIC Windows libs (curl/zlib), a different
-  # shape than build.yml's shared libs.
 
 jobs:
   win32:
@@ -43,7 +37,16 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ./${{ env.INSTALL_PATH }}
-          key: nbbuild-${{ env.INSTALL_PATH }}-${{ hashFiles('build.ps1', '1k/**', 'src/**/build.yml', 'src/**/patch1.ps1', 'src/**/*.patch', 'src/**/rel1.ps1', 'src/**/build1.ps1', 'src/**/install1.ps1', 'src/**/clean1.ps1', 'src/nativebridge/**') }}
+          key: nbbuild-${{ env.INSTALL_PATH }}-${{ hashFiles('build.ps1', '1k/**', 'src/**/build.yml', 'src/**/patch1.ps1', 'src/**/*.patch', 'src/**/build1.ps1', 'src/**/install1.ps1', 'src/**/clean1.ps1', 'src/nativebridge/rust/Cargo.toml', 'src/nativebridge/rust/build.rs', 'src/nativebridge/rust/src/**') }}
+      - name: Cache Cargo registry
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+          key: nbcargo-${{ runner.os }}-${{ hashFiles('src/nativebridge/rust/Cargo.toml') }}
+          restore-keys: |
+            nbcargo-${{ runner.os }}-
       - name: Build
         shell: pwsh
         run: .\build.ps1 -p win32 -a $env:BUILD_ARCH -libs $env:NB_LIBS
@@ -63,7 +66,16 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ./${{ env.INSTALL_PATH }}
-          key: nbbuild-${{ env.INSTALL_PATH }}-${{ hashFiles('build.ps1', '1k/**', 'src/**/build.yml', 'src/**/patch1.ps1', 'src/**/*.patch', 'src/**/rel1.ps1', 'src/**/build1.ps1', 'src/**/install1.ps1', 'src/**/clean1.ps1', 'src/nativebridge/**') }}
+          key: nbbuild-${{ env.INSTALL_PATH }}-${{ hashFiles('build.ps1', '1k/**', 'src/**/build.yml', 'src/**/patch1.ps1', 'src/**/*.patch', 'src/**/build1.ps1', 'src/**/install1.ps1', 'src/**/clean1.ps1', 'src/nativebridge/rust/Cargo.toml', 'src/nativebridge/rust/build.rs', 'src/nativebridge/rust/src/**') }}
+      - name: Cache Cargo registry
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+          key: nbcargo-${{ runner.os }}-${{ hashFiles('src/nativebridge/rust/Cargo.toml') }}
+          restore-keys: |
+            nbcargo-${{ runner.os }}-
       - name: Build
         shell: pwsh
         run: .\build.ps1 -p win32 -a arm64 -libs $env:NB_LIBS
@@ -91,7 +103,16 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ./${{ env.INSTALL_PATH }}
-          key: nbbuild-${{ env.INSTALL_PATH }}-${{ hashFiles('build.ps1', '1k/**', 'src/**/build.yml', 'src/**/patch1.ps1', 'src/**/*.patch', 'src/**/rel1.ps1', 'src/**/build1.ps1', 'src/**/install1.ps1', 'src/**/clean1.ps1', 'src/nativebridge/**') }}
+          key: nbbuild-${{ env.INSTALL_PATH }}-${{ hashFiles('build.ps1', '1k/**', 'src/**/build.yml', 'src/**/patch1.ps1', 'src/**/*.patch', 'src/**/build1.ps1', 'src/**/install1.ps1', 'src/**/clean1.ps1', 'src/nativebridge/rust/Cargo.toml', 'src/nativebridge/rust/build.rs', 'src/nativebridge/rust/src/**') }}
+      - name: Cache Cargo registry
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+          key: nbcargo-${{ runner.os }}-${{ hashFiles('src/nativebridge/rust/Cargo.toml') }}
+          restore-keys: |
+            nbcargo-${{ runner.os }}-
       - name: Build
         shell: pwsh
         run: ./build.ps1 -p linux -a $env:BUILD_ARCH -libs $env:NB_LIBS
@@ -115,7 +136,16 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ./${{ env.INSTALL_PATH }}
-          key: nbbuild-${{ env.INSTALL_PATH }}-${{ hashFiles('build.ps1', '1k/**', 'src/**/build.yml', 'src/**/patch1.ps1', 'src/**/*.patch', 'src/**/rel1.ps1', 'src/**/build1.ps1', 'src/**/install1.ps1', 'src/**/clean1.ps1', 'src/nativebridge/**') }}
+          key: nbbuild-${{ env.INSTALL_PATH }}-${{ hashFiles('build.ps1', '1k/**', 'src/**/build.yml', 'src/**/patch1.ps1', 'src/**/*.patch', 'src/**/build1.ps1', 'src/**/install1.ps1', 'src/**/clean1.ps1', 'src/nativebridge/rust/Cargo.toml', 'src/nativebridge/rust/build.rs', 'src/nativebridge/rust/src/**') }}
+      - name: Cache Cargo registry
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+          key: nbcargo-${{ runner.os }}-${{ hashFiles('src/nativebridge/rust/Cargo.toml') }}
+          restore-keys: |
+            nbcargo-${{ runner.os }}-
       - name: Setup NDK
         shell: pwsh
         run: ./1k/1kiss.ps1 -p android -a $env:BUILD_ARCH -setupOnly -ndkOnly
@@ -146,7 +176,16 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ./${{ env.INSTALL_PATH }}
-          key: nbbuild-${{ env.INSTALL_PATH }}-${{ hashFiles('build.ps1', '1k/**', 'src/**/build.yml', 'src/**/patch1.ps1', 'src/**/*.patch', 'src/**/rel1.ps1', 'src/**/build1.ps1', 'src/**/install1.ps1', 'src/**/clean1.ps1', 'src/nativebridge/**') }}
+          key: nbbuild-${{ env.INSTALL_PATH }}-${{ hashFiles('build.ps1', '1k/**', 'src/**/build.yml', 'src/**/patch1.ps1', 'src/**/*.patch', 'src/**/build1.ps1', 'src/**/install1.ps1', 'src/**/clean1.ps1', 'src/nativebridge/rust/Cargo.toml', 'src/nativebridge/rust/build.rs', 'src/nativebridge/rust/src/**') }}
+      - name: Cache Cargo registry
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+          key: nbcargo-${{ runner.os }}-${{ hashFiles('src/nativebridge/rust/Cargo.toml') }}
+          restore-keys: |
+            nbcargo-${{ runner.os }}-
       - name: Setup Python
         uses: actions/setup-python@v5
         with:
@@ -174,7 +213,16 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ./${{ env.INSTALL_PATH }}
-          key: nbbuild-${{ env.INSTALL_PATH }}-${{ hashFiles('build.ps1', '1k/**', 'src/**/build.yml', 'src/**/patch1.ps1', 'src/**/*.patch', 'src/**/rel1.ps1', 'src/**/build1.ps1', 'src/**/install1.ps1', 'src/**/clean1.ps1', 'src/nativebridge/**') }}
+          key: nbbuild-${{ env.INSTALL_PATH }}-${{ hashFiles('build.ps1', '1k/**', 'src/**/build.yml', 'src/**/patch1.ps1', 'src/**/*.patch', 'src/**/build1.ps1', 'src/**/install1.ps1', 'src/**/clean1.ps1', 'src/nativebridge/rust/Cargo.toml', 'src/nativebridge/rust/build.rs', 'src/nativebridge/rust/src/**') }}
+      - name: Cache Cargo registry
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+          key: nbcargo-${{ runner.os }}-${{ hashFiles('src/nativebridge/rust/Cargo.toml') }}
+          restore-keys: |
+            nbcargo-${{ runner.os }}-
       - name: Setup Xcode version
         uses: maxim-lobanov/setup-xcode@v1
         with:
@@ -202,7 +250,16 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ./${{ env.INSTALL_PATH }}
-          key: nbbuild-${{ env.INSTALL_PATH }}-${{ hashFiles('build.ps1', '1k/**', 'src/**/build.yml', 'src/**/patch1.ps1', 'src/**/*.patch', 'src/**/rel1.ps1', 'src/**/build1.ps1', 'src/**/install1.ps1', 'src/**/clean1.ps1', 'src/nativebridge/**') }}
+          key: nbbuild-${{ env.INSTALL_PATH }}-${{ hashFiles('build.ps1', '1k/**', 'src/**/build.yml', 'src/**/patch1.ps1', 'src/**/*.patch', 'src/**/build1.ps1', 'src/**/install1.ps1', 'src/**/clean1.ps1', 'src/nativebridge/rust/Cargo.toml', 'src/nativebridge/rust/build.rs', 'src/nativebridge/rust/src/**') }}
+      - name: Cache Cargo registry
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+          key: nbcargo-${{ runner.os }}-${{ hashFiles('src/nativebridge/rust/Cargo.toml') }}
+          restore-keys: |
+            nbcargo-${{ runner.os }}-
       - name: Setup Xcode version
         uses: maxim-lobanov/setup-xcode@v1
         with:
@@ -234,7 +291,16 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ./${{ env.INSTALL_PATH }}
-          key: nbbuild-${{ env.INSTALL_PATH }}-${{ hashFiles('build.ps1', '1k/**', 'src/**/build.yml', 'src/**/patch1.ps1', 'src/**/*.patch', 'src/**/rel1.ps1', 'src/**/build1.ps1', 'src/**/install1.ps1', 'src/**/clean1.ps1', 'src/nativebridge/**') }}
+          key: nbbuild-${{ env.INSTALL_PATH }}-${{ hashFiles('build.ps1', '1k/**', 'src/**/build.yml', 'src/**/patch1.ps1', 'src/**/*.patch', 'src/**/build1.ps1', 'src/**/install1.ps1', 'src/**/clean1.ps1', 'src/nativebridge/rust/Cargo.toml', 'src/nativebridge/rust/build.rs', 'src/nativebridge/rust/src/**') }}
+      - name: Cache Cargo registry
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+          key: nbcargo-${{ runner.os }}-${{ hashFiles('src/nativebridge/rust/Cargo.toml') }}
+          restore-keys: |
+            nbcargo-${{ runner.os }}-
       - name: Setup Xcode version
         uses: maxim-lobanov/setup-xcode@v1
         with:
@@ -262,7 +328,16 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ./${{ env.INSTALL_PATH }}
-          key: nbbuild-${{ env.INSTALL_PATH }}-${{ hashFiles('build.ps1', '1k/**', 'src/**/build.yml', 'src/**/patch1.ps1', 'src/**/*.patch', 'src/**/rel1.ps1', 'src/**/build1.ps1', 'src/**/install1.ps1', 'src/**/clean1.ps1', 'src/nativebridge/**') }}
+          key: nbbuild-${{ env.INSTALL_PATH }}-${{ hashFiles('build.ps1', '1k/**', 'src/**/build.yml', 'src/**/patch1.ps1', 'src/**/*.patch', 'src/**/build1.ps1', 'src/**/install1.ps1', 'src/**/clean1.ps1', 'src/nativebridge/rust/Cargo.toml', 'src/nativebridge/rust/build.rs', 'src/nativebridge/rust/src/**') }}
+      - name: Cache Cargo registry
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+          key: nbcargo-${{ runner.os }}-${{ hashFiles('src/nativebridge/rust/Cargo.toml') }}
+          restore-keys: |
+            nbcargo-${{ runner.os }}-
       - name: Setup Xcode version
         uses: maxim-lobanov/setup-xcode@v1
         with:
@@ -284,7 +359,6 @@ jobs:
   dist:
     needs: [win32, win32-arm64, linux, android, osx, ios, ios-arm64-sim, tvos, tvos-arm64-sim]
     runs-on: macos-latest  # needs lipo + xcodebuild for the xcframework
-    # softprops/action-gh-release needs write access to upload to the release.
     permissions:
       contents: write
     steps:
@@ -296,7 +370,6 @@ jobs:
       - name: Flatten artifacts to install_* dirs
         shell: bash
         run: |
-          # Each artifact is named after its install_path and contains that tree.
           for d in _artifacts/install_*; do
             [ -d "$d" ] || continue
             base=$(basename "$d")
@@ -320,18 +393,15 @@ jobs:
           INPUT_TAG: ${{ github.event.inputs.release_tag }}
         run: |
           if [ -n "$INPUT_TAG" ]; then
-            # Explicit tag always wins.
-            echo "tag=$INPUT_TAG" >> "$GITHUB_OUTPUT"
+            echo "tag=$INPUT_TAG" >> $GITHUB_OUTPUT
             echo "Using provided release_tag: $INPUT_TAG"
           else
-            # No tag given: fall back to the most recently created release. The
-            # releases API returns newest-first, so [0] is the last created one.
             latest=$(gh release list --repo "$GITHUB_REPOSITORY" --limit 1 --json tagName --jq '.[0].tagName' 2>/dev/null || true)
             if [ -n "$latest" ] && [ "$latest" != "null" ]; then
-              echo "tag=$latest" >> "$GITHUB_OUTPUT"
+              echo "tag=$latest" >> $GITHUB_OUTPUT
               echo "No release_tag given; defaulting to latest release tag: $latest"
             else
-              echo "tag=" >> "$GITHUB_OUTPUT"
+              echo "tag=" >> $GITHUB_OUTPUT
               echo "No release_tag given and no existing release found; skipping publish."
             fi
           fi
