@@ -74,7 +74,12 @@ fn main() {
             println!("cargo:rustc-link-lib=android");
             // Keep the Unity plugin self-contained instead of requiring the APK
             // to package an NDK-version-matched libc++_shared.so.
-            println!("cargo:rustc-link-lib=static=c++");
+            let cxx_library = env::var("NB_ANDROID_CXX_LIBRARY")
+                .expect("NB_ANDROID_CXX_LIBRARY is not set by build1.ps1");
+            let cxxabi_library = env::var("NB_ANDROID_CXXABI_LIBRARY")
+                .expect("NB_ANDROID_CXXABI_LIBRARY is not set by build1.ps1");
+            link_lib_path(&target_os, &cxx_library);
+            link_lib_path(&target_os, &cxxabi_library);
             // Fail the build when an Android ABI symbol cannot be resolved.
             println!("cargo:rustc-link-arg=-Wl,--no-undefined");
         }

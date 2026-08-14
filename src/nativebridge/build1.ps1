@@ -154,6 +154,26 @@ if ($target_os -eq 'android') {
     if ($IsWindows) { $clang_name = "$clang_name.cmd" }
     $android_linker = Join-Path $env:ANDROID_NDK_BIN $clang_name
     if (-not (Test-Path $android_linker -PathType Leaf)) { fail "android linker not found: $android_linker" }
+
+    # Cargo cannot bundle the NDK's API-level libc++.a linker script when this
+    # crate emits both cdylib and staticlib. Point build.rs at the real archives.
+    $cxx_triple = switch ($target_cpu) {
+        'arm64' { 'aarch64-linux-android' }
+        'armv7' { 'arm-linux-androideabi' }
+        'x86' { 'i686-linux-android' }
+        'x64' { 'x86_64-linux-android' }
+    }
+    $ndk_prebuilt = Split-Path -Path $env:ANDROID_NDK_BIN -Parent
+    $cxx_lib_dir = Join-Path $ndk_prebuilt "sysroot/usr/lib/$cxx_triple"
+    $env:NB_ANDROID_CXX_LIBRARY = Join-Path $cxx_lib_dir 'libc++_static.a'
+    $env:NB_ANDROID_CXXABI_LIBRARY = Join-Path $cxx_lib_dir 'libc++abi.a'
+    if (-not (Test-Path $env:NB_ANDROID_CXX_LIBRARY -PathType Leaf)) {
+        fail "Android libc++ static archive not found: $env:NB_ANDROID_CXX_LIBRARY"
+    }
+    if (-not (Test-Path $env:NB_ANDROID_CXXABI_LIBRARY -PathType Leaf)) {
+        fail "Android libc++abi archive not found: $env:NB_ANDROID_CXXABI_LIBRARY"
+    }
+
     # cargo derives this var name from the target triple (upper-cased, '-' -> '_').
     $linker_var = 'CARGO_TARGET_' + ($rust_target.ToUpper() -replace '-', '_') + '_LINKER'
     Set-Item -Path "env:$linker_var" -Value $android_linker
