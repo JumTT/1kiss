@@ -156,7 +156,9 @@ if ($target_os -eq 'android') {
     if (-not (Test-Path $android_linker -PathType Leaf)) { fail "android linker not found: $android_linker" }
 
     # Cargo cannot bundle the NDK's API-level libc++.a linker script when this
-    # crate emits both cdylib and staticlib. Point build.rs at the real archives.
+    # crate emits both cdylib and staticlib. Stage the real archives in an
+    # isolated directory: adding the NDK's generic ABI directory to -L would
+    # also shadow the API-specific libc.so with its libc.a.
     $cxx_triple = switch ($target_cpu) {
         'arm64' { 'aarch64-linux-android' }
         'armv7' { 'arm-linux-androideabi' }
@@ -165,14 +167,20 @@ if ($target_os -eq 'android') {
     }
     $ndk_prebuilt = Split-Path -Path $env:ANDROID_NDK_BIN -Parent
     $cxx_lib_dir = Join-Path $ndk_prebuilt "sysroot/usr/lib/$cxx_triple"
-    $env:NB_ANDROID_CXX_LIBRARY = Join-Path $cxx_lib_dir 'libc++_static.a'
-    $env:NB_ANDROID_CXXABI_LIBRARY = Join-Path $cxx_lib_dir 'libc++abi.a'
-    if (-not (Test-Path $env:NB_ANDROID_CXX_LIBRARY -PathType Leaf)) {
-        fail "Android libc++ static archive not found: $env:NB_ANDROID_CXX_LIBRARY"
+    $cxx_static_src = Join-Path $cxx_lib_dir 'libc++_static.a'
+    $cxxabi_src = Join-Path $cxx_lib_dir 'libc++abi.a'
+    if (-not (Test-Path $cxx_static_src -PathType Leaf)) {
+        fail "Android libc++ static archive not found: $cxx_static_src"
     }
-    if (-not (Test-Path $env:NB_ANDROID_CXXABI_LIBRARY -PathType Leaf)) {
-        fail "Android libc++abi archive not found: $env:NB_ANDROID_CXXABI_LIBRARY"
+    if (-not (Test-Path $cxxabi_src -PathType Leaf)) {
+        fail "Android libc++abi archive not found: $cxxabi_src"
     }
+    $cxx_stage_dir = Join-Path (Get-Location) 'target/android-cxx-link'
+    New-Item -Path $cxx_stage_dir -ItemType Directory -Force | Out-Null
+    $env:NB_ANDROID_CXX_LIBRARY = Join-Path $cxx_stage_dir 'libc++_static.a'
+    $env:NB_ANDROID_CXXABI_LIBRARY = Join-Path $cxx_stage_dir 'libc++abi.a'
+    Copy-Item -Path $cxx_static_src -Destination $env:NB_ANDROID_CXX_LIBRARY -Force
+    Copy-Item -Path $cxxabi_src -Destination $env:NB_ANDROID_CXXABI_LIBRARY -Force
 
     # cargo derives this var name from the target triple (upper-cased, '-' -> '_').
     $linker_var = 'CARGO_TARGET_' + ($rust_target.ToUpper() -replace '-', '_') + '_LINKER'
