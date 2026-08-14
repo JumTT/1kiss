@@ -120,6 +120,64 @@ if ($target_os -eq 'win32') {
     $env:NB_ZLIB_LIBRARY = "$zlib_dir/lib/libz.a"
 }
 
+# nghttp2 and nghttp3 both embed the same sfparse.o. Rust bundles every member
+# into libNativeBridge.a, and Unity links native iOS/tvOS plugins with -all_load,
+# so the duplicate becomes a hard linker error. Remove it only from a private
+# nghttp2 copy after verifying that both implementations are byte-identical.
+if ($target_os -eq 'ios' -or $target_os -eq 'tvos') {
+    $ar_cmd = (Get-Command ar -CommandType Application -ErrorAction Stop).Source
+    $nghttp2_members = @(& $ar_cmd t $env:NB_NGHTTP2_LIBRARY)
+    if ($LASTEXITCODE -ne 0) { fail 'failed to inspect nghttp2 archive' }
+    $nghttp3_members = @(& $ar_cmd t $env:NB_NGHTTP3_LIBRARY)
+    if ($LASTEXITCODE -ne 0) { fail 'failed to inspect nghttp3 archive' }
+
+    $nghttp2_sfparse_count = @($nghttp2_members | Where-Object { $_ -eq 'sfparse.o' }).Count
+    $nghttp3_sfparse_count = @($nghttp3_members | Where-Object { $_ -eq 'sfparse.o' }).Count
+    if ($nghttp2_sfparse_count -eq 1 -and $nghttp3_sfparse_count -eq 1) {
+        $apple_stage_dir = Join-Path (Get-Location) 'target/apple-native-link'
+        $nghttp2_extract_dir = Join-Path $apple_stage_dir 'nghttp2-sfparse'
+        $nghttp3_extract_dir = Join-Path $apple_stage_dir 'nghttp3-sfparse'
+        New-Item -Path $nghttp2_extract_dir, $nghttp3_extract_dir -ItemType Directory -Force | Out-Null
+
+        foreach ($item in @(
+            @{ Archive = $env:NB_NGHTTP2_LIBRARY; Directory = $nghttp2_extract_dir },
+            @{ Archive = $env:NB_NGHTTP3_LIBRARY; Directory = $nghttp3_extract_dir }
+        )) {
+            $extracted = Join-Path $item.Directory 'sfparse.o'
+            Remove-Item -Path $extracted -Force -ErrorAction SilentlyContinue
+            Push-Location $item.Directory
+            try {
+                & $ar_cmd x $item.Archive 'sfparse.o'
+                if ($LASTEXITCODE -ne 0 -or -not (Test-Path $extracted -PathType Leaf)) {
+                    fail "failed to extract sfparse.o from $($item.Archive)"
+                }
+            }
+            finally {
+                Pop-Location
+            }
+        }
+
+        $nghttp2_sfparse_hash = (Get-FileHash (Join-Path $nghttp2_extract_dir 'sfparse.o') -Algorithm SHA256).Hash
+        $nghttp3_sfparse_hash = (Get-FileHash (Join-Path $nghttp3_extract_dir 'sfparse.o') -Algorithm SHA256).Hash
+        if ($nghttp2_sfparse_hash -ne $nghttp3_sfparse_hash) {
+            fail 'nghttp2 and nghttp3 sfparse.o implementations differ; cannot safely deduplicate'
+        }
+
+        $staged_nghttp2 = Join-Path $apple_stage_dir 'libnghttp2.a'
+        Copy-Item -Path $env:NB_NGHTTP2_LIBRARY -Destination $staged_nghttp2 -Force
+        & $ar_cmd ds $staged_nghttp2 'sfparse.o'
+        if ($LASTEXITCODE -ne 0) { fail 'failed to remove duplicate sfparse.o from staged nghttp2 archive' }
+        if (@(& $ar_cmd t $staged_nghttp2) -contains 'sfparse.o') {
+            fail 'duplicate sfparse.o remains in staged nghttp2 archive'
+        }
+        $env:NB_NGHTTP2_LIBRARY = $staged_nghttp2
+        Write-Host "  deduplicated Apple sfparse.o via $staged_nghttp2"
+    }
+    elseif ($nghttp2_sfparse_count -gt 1 -or $nghttp3_sfparse_count -gt 1) {
+        fail 'unexpected duplicate sfparse.o members inside an nghttp archive'
+    }
+}
+
 $env:NB_LIB_DIRS = @(
     "$curl_dir/lib",
     "$boringssl_dir/lib",
