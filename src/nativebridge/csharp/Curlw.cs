@@ -627,7 +627,7 @@ namespace NativeBridgeF
     /// </summary>
     public static class CurlwDLL
     {
-#if (UNITY_IPHONE || UNITY_TVOS) && !UNITY_EDITOR
+#if (UNITY_IOS || UNITY_TVOS) && !UNITY_EDITOR
         public const string LIBNAME = "__Internal";
 #else
         public const string LIBNAME = "NativeBridge";

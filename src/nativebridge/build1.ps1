@@ -159,18 +159,21 @@ if ($target_os -eq 'android') {
     Set-Item -Path "env:$linker_var" -Value $android_linker
     Write-Host "  android_linker=$android_linker ($linker_var)"
 }
-elseif ($target_os -eq 'ios' -or $target_os -eq 'tvos' -or $target_os -eq 'watchos') {
+elseif ($target_os -eq 'osx' -or $target_os -eq 'ios' -or $target_os -eq 'tvos' -or $target_os -eq 'watchos') {
     # The dependency C libraries (curl, boringssl, ...) are compiled by
-    # 1k/ios.cmake with a specific deployment target (tvOS=15.0, iOS=11/12,
-    # watchOS=8.0). Rust's builtin apple targets otherwise default to a much
-    # older min-OS (e.g. tvOS 10.0), so the final link picks the wrong platform
-    # stub of libSystem and fails, e.g.:
+    # the 1k toolchain with a specific deployment target. Rust's builtin Apple
+    # targets otherwise use their own defaults, so a universal macOS dylib can
+    # end up with inconsistent slices and embedded targets can pick the wrong
+    # platform stub of libSystem, e.g.:
     #   Undefined symbols: ___chkstk_darwin   (referenced by tvOS 15 objects)
     # Force rustc to link with the SAME min-OS via *_DEPLOYMENT_TARGET, mirroring
     # 1k/ios.cmake (honoring an explicit -minsdk override when present).
     $deploy = $Global:target_minsdk
     if (-not $deploy) {
-        if ($target_os -eq 'ios') {
+        if ($target_os -eq 'osx') {
+            $deploy = '10.13'
+        }
+        elseif ($target_os -eq 'ios') {
             if ($target_cpu -eq 'armv7') {
                 $deploy = '10.0'
             }
@@ -189,8 +192,14 @@ elseif ($target_os -eq 'ios' -or $target_os -eq 'tvos' -or $target_os -eq 'watch
             $deploy = '8.0'
         }
     }
+    # Apple Silicon macOS does not support deployment targets older than 11.0.
+    if ($target_os -eq 'osx' -and $target_cpu -eq 'arm64' -and
+        [version]$deploy -lt [version]'11.0') {
+        $deploy = '11.0'
+    }
     if ($deploy) {
         switch ($target_os) {
+            'osx' { $env:MACOSX_DEPLOYMENT_TARGET = $deploy }
             'ios' { $env:IPHONEOS_DEPLOYMENT_TARGET = $deploy }
             'tvos' { $env:TVOS_DEPLOYMENT_TARGET = $deploy }
             'watchos' { $env:WATCHOS_DEPLOYMENT_TARGET = $deploy }

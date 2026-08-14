@@ -526,9 +526,14 @@ extern "C" {
     pub fn shutdown(s: c_int, how: c_int) -> c_int;
 }
 
-#[cfg(any(target_os = "linux", target_os = "android"))]
+#[cfg(target_os = "linux")]
 extern "C" {
     fn __errno_location() -> *mut c_int;
+}
+
+#[cfg(target_os = "android")]
+extern "C" {
+    fn __errno() -> *mut c_int;
 }
 
 #[cfg(any(target_os = "macos", target_os = "ios", target_os = "tvos"))]
@@ -543,9 +548,13 @@ extern "C" {
 
 #[inline]
 unsafe fn errno_ptr() -> *mut c_int {
-    #[cfg(any(target_os = "linux", target_os = "android"))]
+    #[cfg(target_os = "linux")]
     {
         __errno_location()
+    }
+    #[cfg(target_os = "android")]
+    {
+        __errno()
     }
     #[cfg(any(target_os = "macos", target_os = "ios", target_os = "tvos"))]
     {

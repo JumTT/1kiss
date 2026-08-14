@@ -72,9 +72,19 @@ fn main() {
         "android" => {
             println!("cargo:rustc-link-lib=log");
             println!("cargo:rustc-link-lib=android");
-            println!("cargo:rustc-link-lib=c++");
+            // Keep the Unity plugin self-contained instead of requiring the APK
+            // to package an NDK-version-matched libc++_shared.so.
+            println!("cargo:rustc-link-lib=static=c++");
+            // Fail the build when an Android ABI symbol cannot be resolved.
+            println!("cargo:rustc-link-arg=-Wl,--no-undefined");
         }
-        "macos" | "ios" | "tvos" => {
+        "macos" => {
+            println!("cargo:rustc-link-lib=framework=CoreFoundation");
+            println!("cargo:rustc-link-lib=framework=SystemConfiguration");
+            println!("cargo:rustc-link-lib=c++");
+            println!("cargo:rustc-link-arg=-Wl,-install_name,@rpath/NativeBridge.dylib");
+        }
+        "ios" | "tvos" => {
             println!("cargo:rustc-link-lib=framework=CoreFoundation");
             println!("cargo:rustc-link-lib=framework=SystemConfiguration");
             println!("cargo:rustc-link-lib=c++");
