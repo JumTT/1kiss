@@ -193,6 +193,21 @@ elseif ($target_os -eq 'ios' -or $target_os -eq 'tvos' -or $target_os -eq 'watch
     }
 }
 
-Write-Host "nativebridge build1: running cargo build --release --target $rust_target"
-cargo build --release --target $rust_target
+# Tier 3 Rust targets (no pre-built std shipped via rustup) require nightly
+# with -Zbuild-std to compile std/panic_abort from source. All tvOS targets are
+# currently tier 3; iOS/macOS/Windows/Linux/Android are tier 1/2.
+$needs_build_std = ($target_os -eq 'tvos')
+
+$cargo_cmd = 'cargo'
+$cargo_args = @('build', '--release', '--target', $rust_target)
+if ($needs_build_std) {
+    Write-Host "  tvos target detected: installing nightly toolchain for -Zbuild-std"
+    rustup toolchain install nightly --profile minimal 2>&1 | Out-Null
+    rustup +nightly target add $rust_target 2>&1 | Out-Null
+    $cargo_cmd = 'cargo'
+    $cargo_args = @('+nightly', 'build', '-Z', 'build-std=std,panic_abort', '--release', '--target', $rust_target)
+}
+
+Write-Host "nativebridge build1: running $cargo_cmd $cargo_args"
+& $cargo_cmd @cargo_args
 if ($LASTEXITCODE -ne 0) { fail "cargo build failed with exit code $LASTEXITCODE" }
