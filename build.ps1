@@ -107,9 +107,9 @@ if ($IsWin) {
 
 if ($Global:is_android) {
     active_ndk_toolchain
-    # armv7 uses API 19: BoringSSL's crypto/cpu_arm_linux.cc calls getauxval(),
-    # which Bionic only declares from API 18+. x86 also bumped to 19 to match.
-    $Global:android_api_level = @{arm64 = 21; x64 = 22; armv7 = 19; x86 = 19 }[$target_cpu]
+    # ARMv7 needs API 21 because Rust std uses dl_iterate_phdr, which the NDK's
+    # ARM libdl stub does not expose at API 19. x86 exposes it at API 19.
+    $Global:android_api_level = @{arm64 = 21; x64 = 22; armv7 = 21; x86 = 19 }[$target_cpu]
 }
 elseif ($is_darwin_family) {
     # query xcode version
