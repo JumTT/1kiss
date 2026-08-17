@@ -35,6 +35,7 @@ fn main() {
     ];
 
     for (env_var, fallback_name) in &nb_libs_order {
+        println!("cargo:rerun-if-env-changed={}", env_var);
         if let Ok(lib_path) = env::var(env_var) {
             if !lib_path.is_empty() {
                 link_lib_path(&target_os, &lib_path);
@@ -44,9 +45,10 @@ fn main() {
         println!("cargo:rustc-link-lib=static={}", fallback_name);
     }
 
+    println!("cargo:rerun-if-env-changed=NB_LIB_DIRS");
     if let Ok(extra_dirs) = env::var("NB_LIB_DIRS") {
-        for dir in extra_dirs.split(|c| c == ';' || c == ':').filter(|s| !s.is_empty()) {
-            println!("cargo:rustc-link-search=native={}", dir);
+        for dir in env::split_paths(&extra_dirs) {
+            println!("cargo:rustc-link-search=native={}", dir.display());
         }
     }
 
@@ -70,6 +72,8 @@ fn main() {
             println!("cargo:rustc-link-lib=stdc++");
         }
         "android" => {
+            println!("cargo:rerun-if-env-changed=NB_ANDROID_CXX_LIBRARY");
+            println!("cargo:rerun-if-env-changed=NB_ANDROID_CXXABI_LIBRARY");
             println!("cargo:rustc-link-lib=log");
             println!("cargo:rustc-link-lib=android");
             // Keep the Unity plugin self-contained instead of requiring the APK

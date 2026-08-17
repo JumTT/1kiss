@@ -6,6 +6,8 @@
 #![allow(private_interfaces)]
 
 use libc::{c_char, c_double, c_int, c_long, c_uint, c_void, intptr_t, size_t};
+#[cfg(not(windows))]
+use libc::{pthread_mutex_t, EINTR, ETIMEDOUT, SHUT_RDWR};
 use std::collections::HashMap;
 use std::ffi::{CStr, CString};
 use std::mem;
@@ -64,11 +66,14 @@ pub const CURLHE_OK: CURLHcode = 0;
 pub const CURLHE_BAD_INDEX: CURLHcode = 1;
 pub const CURLHE_MISSING_HEADER: CURLHcode = 2;
 pub const CURLHE_NO_HEADER: CURLHcode = 3;
-pub const CURLHE_OUT_OF_MEMORY: CURLHcode = 4;
+pub const CURLHE_NO_REQUEST: CURLHcode = 4;
+pub const CURLHE_OUT_OF_MEMORY: CURLHcode = 5;
+pub const CURLHE_BAD_ARGUMENT: CURLHcode = 6;
+pub const CURLHE_NOT_BUILT_IN: CURLHcode = 7;
 
 pub const CURLUE_OK: CURLUcode = 0;
 
-pub const CURLVERSION_NOW: CURLversion = 12;
+pub const CURLVERSION_NOW: CURLversion = 11;
 pub const CURLMSG_DONE: CURLMSG = 1;
 
 pub const CURLUPART_URL: CURLUPart = 0;
@@ -168,7 +173,7 @@ pub const CURLOPT_SSL_VERIFYHOST: CURLoption = opt_long!(81);
 pub const CURLOPT_HTTP_VERSION: CURLoption = opt_long!(84);
 pub const CURLOPT_NOSIGNAL: CURLoption = opt_long!(99);
 pub const CURLOPT_PROXYTYPE: CURLoption = opt_long!(101);
-pub const CURLOPT_SHARE: CURLoption = opt_obj!(101);
+pub const CURLOPT_SHARE: CURLoption = opt_obj!(100);
 pub const CURLOPT_PRIVATE: CURLoption = opt_obj!(103);
 pub const CURLOPT_ENCODING: CURLoption = opt_obj!(102);
 pub const CURLOPT_ACCEPT_ENCODING: CURLoption = CURLOPT_ENCODING;
@@ -178,95 +183,95 @@ pub const CURLOPT_CONNECTTIMEOUT_MS: CURLoption = opt_long!(156);
 pub const CURLOPT_SSLVERSION: CURLoption = opt_long!(32);
 pub const CURLOPT_INTERFACE: CURLoption = opt_obj!(62);
 pub const CURLOPT_DNS_CACHE_TIMEOUT: CURLoption = opt_long!(92);
-pub const CURLOPT_DNS_SERVERS: CURLoption = opt_obj!(255);
-pub const CURLOPT_DNS_LOCAL_IP4: CURLoption = opt_obj!(263);
-pub const CURLOPT_DNS_LOCAL_IP6: CURLoption = opt_obj!(264);
+pub const CURLOPT_DNS_SERVERS: CURLoption = opt_obj!(211);
+pub const CURLOPT_DNS_LOCAL_IP4: CURLoption = opt_obj!(222);
+pub const CURLOPT_DNS_LOCAL_IP6: CURLoption = opt_obj!(223);
 pub const CURLOPT_RESOLVE: CURLoption = opt_obj!(203);
 pub const CURLOPT_USE_SSL: CURLoption = opt_long!(119);
 pub const CURLOPT_SSL_OPTIONS: CURLoption = opt_long!(216);
 pub const CURLOPT_HTTPAUTH: CURLoption = opt_long!(107);
 pub const CURLOPT_PROXYAUTH: CURLoption = opt_long!(111);
-pub const CURLOPT_SSH_AUTH_TYPES: CURLoption = opt_long!(152);
+pub const CURLOPT_SSH_AUTH_TYPES: CURLoption = opt_long!(151);
 pub const CURLOPT_PROTOCOLS: CURLoption = opt_long!(181);
 pub const CURLOPT_REDIR_PROTOCOLS: CURLoption = opt_long!(182);
 pub const CURLOPT_POSTREDIR: CURLoption = opt_long!(161);
-pub const CURLOPT_SOCKS5_AUTH: CURLoption = opt_long!(233);
-pub const CURLOPT_SOCKOPTDATA: CURLoption = opt_obj!(148);
+pub const CURLOPT_SOCKS5_AUTH: CURLoption = opt_long!(267);
+pub const CURLOPT_SOCKOPTDATA: CURLoption = opt_obj!(149);
 pub const CURLOPT_OPENSOCKETFUNCTION: CURLoption = opt_func!(163);
 pub const CURLOPT_OPENSOCKETDATA: CURLoption = opt_obj!(164);
 pub const CURLOPT_CLOSESOCKETFUNCTION: CURLoption = opt_func!(208);
 pub const CURLOPT_CLOSESOCKETDATA: CURLoption = opt_obj!(209);
 pub const CURLOPT_HEADERDATA: CURLoption = opt_obj!(29);
 pub const CURLOPT_HEADERFUNCTION: CURLoption = opt_func!(79);
-pub const CURLOPT_COPYPOSTFIELDS: CURLoption = opt_obj!(166);
+pub const CURLOPT_COPYPOSTFIELDS: CURLoption = opt_obj!(165);
 pub const CURLOPT_POSTFIELDSIZE_LARGE: CURLoption = opt_offt!(120);
 pub const CURLOPT_INFILESIZE_LARGE: CURLoption = opt_offt!(115);
 pub const CURLOPT_RESUME_FROM_LARGE: CURLoption = opt_offt!(116);
-pub const CURLOPT_MAX_RECV_SPEED_LARGE: CURLoption = opt_offt!(305);
-pub const CURLOPT_MAX_SEND_SPEED_LARGE: CURLoption = opt_offt!(306);
-pub const CURLOPT_ALTSVC_CTRL: CURLoption = opt_long!(250);
-pub const CURLOPT_MIMEPOST: CURLoption = opt_obj!(267);
-pub const CURLOPT_INTERLEAVEDATA: CURLoption = opt_obj!(265);
-pub const CURLOPT_INTERLEAVEFUNCTION: CURLoption = opt_func!(266);
+pub const CURLOPT_MAX_RECV_SPEED_LARGE: CURLoption = opt_offt!(146);
+pub const CURLOPT_MAX_SEND_SPEED_LARGE: CURLoption = opt_offt!(145);
+pub const CURLOPT_ALTSVC_CTRL: CURLoption = opt_long!(286);
+pub const CURLOPT_MIMEPOST: CURLoption = opt_obj!(269);
+pub const CURLOPT_INTERLEAVEDATA: CURLoption = opt_obj!(195);
+pub const CURLOPT_INTERLEAVEFUNCTION: CURLoption = opt_func!(196);
 
 pub const CURLINFO_RESPONSE_CODE: CURLINFO = CURLINFO_LONG + 0x2;
-pub const CURLINFO_HTTP_VERSION: CURLINFO = CURLINFO_LONG + 0x22;
+pub const CURLINFO_HTTP_VERSION: CURLINFO = CURLINFO_LONG + 46;
 pub const CURLINFO_TOTAL_TIME: CURLINFO = CURLINFO_DOUBLE + 0x3;
 pub const CURLINFO_NAMELOOKUP_TIME: CURLINFO = CURLINFO_DOUBLE + 0x4;
 pub const CURLINFO_CONNECT_TIME: CURLINFO = CURLINFO_DOUBLE + 0x5;
-pub const CURLINFO_APPCONNECT_TIME: CURLINFO = CURLINFO_DOUBLE + 0x21;
-pub const CURLINFO_PRETRANSFER_TIME: CURLINFO = CURLINFO_DOUBLE + 0x6;
-pub const CURLINFO_STARTTRANSFER_TIME: CURLINFO = CURLINFO_DOUBLE + 0x7;
-pub const CURLINFO_REDIRECT_TIME: CURLINFO = CURLINFO_DOUBLE + 0x1d;
-pub const CURLINFO_REDIRECT_COUNT: CURLINFO = CURLINFO_LONG + 0x14;
-pub const CURLINFO_REDIRECT_URL: CURLINFO = CURLINFO_STRING + 0x1f;
-pub const CURLINFO_EFFECTIVE_URL: CURLINFO = CURLINFO_STRING + 0x1;
-pub const CURLINFO_CONTENT_TYPE: CURLINFO = CURLINFO_STRING + 0x12;
-pub const CURLINFO_CONTENT_LENGTH_DOWNLOAD: CURLINFO = CURLINFO_DOUBLE + 0xf;
-pub const CURLINFO_CONTENT_LENGTH_UPLOAD: CURLINFO = CURLINFO_DOUBLE + 0x10;
-pub const CURLINFO_SIZE_DOWNLOAD: CURLINFO = CURLINFO_DOUBLE + 0x8;
-pub const CURLINFO_SIZE_UPLOAD: CURLINFO = CURLINFO_DOUBLE + 0xe;
-pub const CURLINFO_SPEED_DOWNLOAD: CURLINFO = CURLINFO_DOUBLE + 0x9;
-pub const CURLINFO_SPEED_UPLOAD: CURLINFO = CURLINFO_DOUBLE + 0xb;
-pub const CURLINFO_HEADER_SIZE: CURLINFO = CURLINFO_LONG + 0x15;
-pub const CURLINFO_REQUEST_SIZE: CURLINFO = CURLINFO_LONG + 0x16;
-pub const CURLINFO_SSL_VERIFYRESULT: CURLINFO = CURLINFO_LONG + 0x17;
-pub const CURLINFO_FILETIME: CURLINFO = CURLINFO_LONG + 0x18;
-pub const CURLINFO_FILETIME_T: CURLINFO = CURLINFO_OFF_T + 0x3c;
-pub const CURLINFO_HTTPAUTH_AVAIL: CURLINFO = CURLINFO_LONG + 0x1b;
-pub const CURLINFO_PROXYAUTH_AVAIL: CURLINFO = CURLINFO_LONG + 0x1c;
-pub const CURLINFO_OS_ERRNO: CURLINFO = CURLINFO_LONG + 0x19;
-pub const CURLINFO_NUM_CONNECTS: CURLINFO = CURLINFO_LONG + 0x1a;
-pub const CURLINFO_PRIMARY_IP: CURLINFO = CURLINFO_STRING + 0x20;
-pub const CURLINFO_PRIMARY_PORT: CURLINFO = CURLINFO_LONG + 0x24;
-pub const CURLINFO_LOCAL_IP: CURLINFO = CURLINFO_STRING + 0x23;
-pub const CURLINFO_LOCAL_PORT: CURLINFO = CURLINFO_LONG + 0x25;
-pub const CURLINFO_COOKIELIST: CURLINFO = CURLINFO_SLIST + 0x13;
-pub const CURLINFO_LASTSOCKET: CURLINFO = CURLINFO_LONG + 0x1d;
-pub const CURLINFO_ACTIVESOCKET: CURLINFO = CURLINFO_SOCKET + 0x2e;
-pub const CURLINFO_CERTINFO: CURLINFO = CURLINFO_SLIST + 0x3a;
-pub const CURLINFO_PRIVATE: CURLINFO = CURLINFO_STRING + 0x29;
-pub const CURLINFO_RETRY_AFTER: CURLINFO = CURLINFO_OFF_T + 0x40;
-pub const CURLINFO_HTTP_CONNECTCODE: CURLINFO = CURLINFO_LONG + 0x26;
-pub const CURLINFO_PROTOCOL: CURLINFO = CURLINFO_LONG + 0x36;
-pub const CURLINFO_SCHEME: CURLINFO = CURLINFO_STRING + 0x37;
-pub const CURLINFO_APPCONNECT_TIME_T: CURLINFO = CURLINFO_OFF_T + 0x3d;
-pub const CURLINFO_CONNECT_TIME_T: CURLINFO = CURLINFO_OFF_T + 0x3b;
-pub const CURLINFO_NAMELOOKUP_TIME_T: CURLINFO = CURLINFO_OFF_T + 0x3e;
-pub const CURLINFO_PRETRANSFER_TIME_T: CURLINFO = CURLINFO_OFF_T + 0x3f;
-pub const CURLINFO_REDIRECT_TIME_T: CURLINFO = CURLINFO_OFF_T + 0x41;
-pub const CURLINFO_STARTTRANSFER_TIME_T: CURLINFO = CURLINFO_OFF_T + 0x42;
-pub const CURLINFO_TOTAL_TIME_T: CURLINFO = CURLINFO_OFF_T + 0x3a;
-pub const CURLINFO_SIZE_DOWNLOAD_T: CURLINFO = CURLINFO_OFF_T + 0x30;
-pub const CURLINFO_SIZE_UPLOAD_T: CURLINFO = CURLINFO_OFF_T + 0x31;
-pub const CURLINFO_SPEED_DOWNLOAD_T: CURLINFO = CURLINFO_OFF_T + 0x33;
-pub const CURLINFO_SPEED_UPLOAD_T: CURLINFO = CURLINFO_OFF_T + 0x34;
-pub const CURLINFO_CONTENT_LENGTH_DOWNLOAD_T: CURLINFO = CURLINFO_OFF_T + 0x35;
-pub const CURLINFO_CONTENT_LENGTH_UPLOAD_T: CURLINFO = CURLINFO_OFF_T + 0x36;
-pub const CURLINFO_EFFECTIVE_METHOD: CURLINFO = CURLINFO_STRING + 0x42;
-pub const CURLINFO_XFER_ID: CURLINFO = CURLINFO_OFF_T + 0x45;
-pub const CURLINFO_CONN_ID: CURLINFO = CURLINFO_OFF_T + 0x46;
-pub const CURLINFO_TLS_SSL_PTR: CURLINFO = 0x400000 + 0x3d;
+pub const CURLINFO_APPCONNECT_TIME: CURLINFO = CURLINFO_DOUBLE + 33;
+pub const CURLINFO_PRETRANSFER_TIME: CURLINFO = CURLINFO_DOUBLE + 6;
+pub const CURLINFO_STARTTRANSFER_TIME: CURLINFO = CURLINFO_DOUBLE + 17;
+pub const CURLINFO_REDIRECT_TIME: CURLINFO = CURLINFO_DOUBLE + 19;
+pub const CURLINFO_REDIRECT_COUNT: CURLINFO = CURLINFO_LONG + 20;
+pub const CURLINFO_REDIRECT_URL: CURLINFO = CURLINFO_STRING + 31;
+pub const CURLINFO_EFFECTIVE_URL: CURLINFO = CURLINFO_STRING + 1;
+pub const CURLINFO_CONTENT_TYPE: CURLINFO = CURLINFO_STRING + 18;
+pub const CURLINFO_CONTENT_LENGTH_DOWNLOAD: CURLINFO = CURLINFO_DOUBLE + 15;
+pub const CURLINFO_CONTENT_LENGTH_UPLOAD: CURLINFO = CURLINFO_DOUBLE + 16;
+pub const CURLINFO_SIZE_DOWNLOAD: CURLINFO = CURLINFO_DOUBLE + 8;
+pub const CURLINFO_SIZE_UPLOAD: CURLINFO = CURLINFO_DOUBLE + 7;
+pub const CURLINFO_SPEED_DOWNLOAD: CURLINFO = CURLINFO_DOUBLE + 9;
+pub const CURLINFO_SPEED_UPLOAD: CURLINFO = CURLINFO_DOUBLE + 10;
+pub const CURLINFO_HEADER_SIZE: CURLINFO = CURLINFO_LONG + 11;
+pub const CURLINFO_REQUEST_SIZE: CURLINFO = CURLINFO_LONG + 12;
+pub const CURLINFO_SSL_VERIFYRESULT: CURLINFO = CURLINFO_LONG + 13;
+pub const CURLINFO_FILETIME: CURLINFO = CURLINFO_LONG + 14;
+pub const CURLINFO_FILETIME_T: CURLINFO = CURLINFO_OFF_T + 14;
+pub const CURLINFO_HTTPAUTH_AVAIL: CURLINFO = CURLINFO_LONG + 23;
+pub const CURLINFO_PROXYAUTH_AVAIL: CURLINFO = CURLINFO_LONG + 24;
+pub const CURLINFO_OS_ERRNO: CURLINFO = CURLINFO_LONG + 25;
+pub const CURLINFO_NUM_CONNECTS: CURLINFO = CURLINFO_LONG + 26;
+pub const CURLINFO_PRIMARY_IP: CURLINFO = CURLINFO_STRING + 32;
+pub const CURLINFO_PRIMARY_PORT: CURLINFO = CURLINFO_LONG + 40;
+pub const CURLINFO_LOCAL_IP: CURLINFO = CURLINFO_STRING + 41;
+pub const CURLINFO_LOCAL_PORT: CURLINFO = CURLINFO_LONG + 42;
+pub const CURLINFO_COOKIELIST: CURLINFO = CURLINFO_SLIST + 28;
+pub const CURLINFO_LASTSOCKET: CURLINFO = CURLINFO_LONG + 29;
+pub const CURLINFO_ACTIVESOCKET: CURLINFO = CURLINFO_SOCKET + 44;
+pub const CURLINFO_CERTINFO: CURLINFO = CURLINFO_SLIST + 34;
+pub const CURLINFO_PRIVATE: CURLINFO = CURLINFO_STRING + 21;
+pub const CURLINFO_RETRY_AFTER: CURLINFO = CURLINFO_OFF_T + 57;
+pub const CURLINFO_HTTP_CONNECTCODE: CURLINFO = CURLINFO_LONG + 22;
+pub const CURLINFO_PROTOCOL: CURLINFO = CURLINFO_LONG + 48;
+pub const CURLINFO_SCHEME: CURLINFO = CURLINFO_STRING + 49;
+pub const CURLINFO_APPCONNECT_TIME_T: CURLINFO = CURLINFO_OFF_T + 56;
+pub const CURLINFO_CONNECT_TIME_T: CURLINFO = CURLINFO_OFF_T + 52;
+pub const CURLINFO_NAMELOOKUP_TIME_T: CURLINFO = CURLINFO_OFF_T + 51;
+pub const CURLINFO_PRETRANSFER_TIME_T: CURLINFO = CURLINFO_OFF_T + 53;
+pub const CURLINFO_REDIRECT_TIME_T: CURLINFO = CURLINFO_OFF_T + 55;
+pub const CURLINFO_STARTTRANSFER_TIME_T: CURLINFO = CURLINFO_OFF_T + 54;
+pub const CURLINFO_TOTAL_TIME_T: CURLINFO = CURLINFO_OFF_T + 50;
+pub const CURLINFO_SIZE_DOWNLOAD_T: CURLINFO = CURLINFO_OFF_T + 8;
+pub const CURLINFO_SIZE_UPLOAD_T: CURLINFO = CURLINFO_OFF_T + 7;
+pub const CURLINFO_SPEED_DOWNLOAD_T: CURLINFO = CURLINFO_OFF_T + 9;
+pub const CURLINFO_SPEED_UPLOAD_T: CURLINFO = CURLINFO_OFF_T + 10;
+pub const CURLINFO_CONTENT_LENGTH_DOWNLOAD_T: CURLINFO = CURLINFO_OFF_T + 15;
+pub const CURLINFO_CONTENT_LENGTH_UPLOAD_T: CURLINFO = CURLINFO_OFF_T + 16;
+pub const CURLINFO_EFFECTIVE_METHOD: CURLINFO = CURLINFO_STRING + 58;
+pub const CURLINFO_XFER_ID: CURLINFO = CURLINFO_OFF_T + 63;
+pub const CURLINFO_CONN_ID: CURLINFO = CURLINFO_OFF_T + 64;
+pub const CURLINFO_TLS_SSL_PTR: CURLINFO = CURLINFO_SLIST + 45;
 
 pub const CURLMOPT_SOCKETFUNCTION: CURLMoption = opt_func!(1);
 pub const CURLMOPT_SOCKETDATA: CURLMoption = opt_obj!(2);
@@ -283,14 +288,15 @@ pub const CURLSHOPT_LOCKFUNC: CURLSHoption = 3;
 pub const CURLSHOPT_UNLOCKFUNC: CURLSHoption = 4;
 pub const CURLSHOPT_USERDATA: CURLSHoption = 5;
 
-pub const CURL_LOCK_DATA_SHARE: curl_lock_data = 0;
-pub const CURL_LOCK_DATA_COOKIE: curl_lock_data = 1;
-pub const CURL_LOCK_DATA_DNS: curl_lock_data = 2;
-pub const CURL_LOCK_DATA_SSL_SESSION: curl_lock_data = 3;
-pub const CURL_LOCK_DATA_CONNECT: curl_lock_data = 4;
-pub const CURL_LOCK_DATA_PSL: curl_lock_data = 5;
-pub const CURL_LOCK_DATA_HSTS: curl_lock_data = 6;
-pub const CURL_LOCK_DATA_LAST: curl_lock_data = 7;
+pub const CURL_LOCK_DATA_NONE: curl_lock_data = 0;
+pub const CURL_LOCK_DATA_SHARE: curl_lock_data = 1;
+pub const CURL_LOCK_DATA_COOKIE: curl_lock_data = 2;
+pub const CURL_LOCK_DATA_DNS: curl_lock_data = 3;
+pub const CURL_LOCK_DATA_SSL_SESSION: curl_lock_data = 4;
+pub const CURL_LOCK_DATA_CONNECT: curl_lock_data = 5;
+pub const CURL_LOCK_DATA_PSL: curl_lock_data = 6;
+pub const CURL_LOCK_DATA_HSTS: curl_lock_data = 7;
+pub const CURL_LOCK_DATA_LAST: curl_lock_data = 8;
 
 pub const CURL_LOCK_ACCESS_NONE: curl_lock_access = 0;
 pub const CURL_LOCK_ACCESS_SHARED: curl_lock_access = 1;
@@ -306,7 +312,7 @@ pub const CURL_VERSION_DEBUG: c_int = 64;
 pub const CURL_VERSION_ASYNCHDNS: c_int = 128;
 pub const CURL_VERSION_SPNEGO: c_int = 256;
 pub const CURL_VERSION_HTTP2: c_int = 65536;
-pub const CURL_VERSION_BROTLI: c_int = 1 << 20;
+pub const CURL_VERSION_BROTLI: c_int = 1 << 23;
 pub const CURL_VERSION_HTTP3: c_int = 1 << 25;
 pub const CURL_VERSION_ZSTD: c_int = 1 << 26;
 
@@ -328,7 +334,7 @@ pub const CURLPROXY_HTTP: c_long = 0;
 pub const CURLPROXY_HTTPS: c_long = 2;
 pub const CURLPROXY_SOCKS4: c_long = 4;
 pub const CURLPROXY_SOCKS5: c_long = 5;
-pub const CURLPROXY_SOCKS5_HOSTNAME: c_long = 5;
+pub const CURLPROXY_SOCKS5_HOSTNAME: c_long = 7;
 
 pub const CURL_ZERO_TERMINATED: isize = -1;
 
@@ -343,8 +349,8 @@ pub const CURLWS_BINARY: c_uint = 1 << 1;
 pub const CURLWS_CONT: c_uint = 1 << 2;
 pub const CURLWS_CLOSE: c_uint = 1 << 3;
 pub const CURLWS_PING: c_uint = 1 << 4;
-pub const CURLWS_PONG: c_uint = 1 << 5;
-pub const CURLWS_OFFSET: c_uint = 1 << 6;
+pub const CURLWS_OFFSET: c_uint = 1 << 5;
+pub const CURLWS_PONG: c_uint = 1 << 6;
 
 pub const CURL_BLOB_COPY: c_uint = 1;
 pub const CURL_BLOB_NOCOPY: c_uint = 0;
@@ -376,15 +382,18 @@ pub type c_short = i16;
 pub struct CURLMsg {
     pub msg: CURLMSG,
     pub easy_handle: *mut CURL,
-    // Proxy for curl's `union { void *whatever; CURLcode result; }`. Only read
-    // through a curl-owned pointer, and only offset 0 (the CURLcode result) is
-    // accessed, so a pointer-sized byte blob preserving the field offset suffices.
-    pub data: [u8; 8],
+    pub data: CURLMsgData,
+}
+
+#[repr(C)]
+pub union CURLMsgData {
+    pub whatever: *mut c_void,
+    pub result: CURLcode,
 }
 
 impl CURLMsg {
     unsafe fn result_code(&self) -> CURLcode {
-        ptr::read_unaligned(self.data.as_ptr() as *const CURLcode)
+        self.data.result
     }
 }
 
@@ -427,6 +436,7 @@ pub struct curl_version_info_data {
     pub hyper_version: *const c_char,
     pub gsasl_version: *const c_char,
     pub feature_names: *const *const c_char,
+    pub rtmp_version: *const c_char,
 }
 
 #[repr(C)]
@@ -448,13 +458,23 @@ pub struct curl_ws_frame {
     pub len: size_t,
 }
 
+#[cfg(windows)]
+#[repr(C)]
+pub struct sockaddr {
+    pub sa_family: u16,
+    pub sa_data: [c_char; 14],
+}
+
+#[cfg(not(windows))]
+pub use libc::sockaddr;
+
 #[repr(C)]
 pub struct curl_sockaddr {
     pub family: c_int,
     pub socktype: c_int,
     pub protocol: c_int,
     pub addrlen: c_uint,
-    pub addr: [u8; 128],
+    pub addr: sockaddr,
 }
 
 pub type curl_write_callback = unsafe extern "C" fn(*mut c_char, size_t, size_t, *mut c_void) -> size_t;
@@ -488,13 +508,6 @@ pub type u_int = c_uint;
 pub const WSAEINTR: c_int = 10004;
 pub const WSAETIMEDOUT: c_int = 10060;
 pub const SD_BOTH: c_int = 2;
-
-#[cfg(not(windows))]
-const ETIMEDOUT: c_int = 110;
-#[cfg(not(windows))]
-const EINTR: c_int = 4;
-#[cfg(not(windows))]
-const SHUT_RDWR: c_int = 2;
 
 #[cfg(windows)]
 extern "system" {
@@ -774,7 +787,12 @@ unsafe fn fd_copy(dst: *mut fd_set, src: *const fd_set) {
 #[cfg(windows)]
 #[repr(C)]
 struct CRITICAL_SECTION {
-    _opaque: [u8; 40],
+    _debug_info: *mut c_void,
+    _lock_count: i32,
+    _recursion_count: i32,
+    _owning_thread: *mut c_void,
+    _lock_semaphore: *mut c_void,
+    _spin_count: usize,
 }
 
 #[cfg(windows)]
@@ -785,62 +803,50 @@ extern "system" {
     fn DeleteCriticalSection(lpCriticalSection: *mut CRITICAL_SECTION);
 }
 
-#[cfg(not(windows))]
-type pthread_mutex_t = [u8; 40];
-
-#[cfg(not(windows))]
-const PTHREAD_MUTEX_INITIALIZER: pthread_mutex_t = [0; 40];
-
-#[cfg(not(windows))]
-extern "C" {
-    fn pthread_mutex_init(mutex: *mut pthread_mutex_t, attr: *const c_void) -> c_int;
-    fn pthread_mutex_lock(mutex: *mut pthread_mutex_t) -> c_int;
-    fn pthread_mutex_unlock(mutex: *mut pthread_mutex_t) -> c_int;
-    fn pthread_mutex_destroy(mutex: *mut pthread_mutex_t) -> c_int;
-}
-
 struct RawLock {
     #[cfg(windows)]
-    cs: CRITICAL_SECTION,
+    cs: Box<CRITICAL_SECTION>,
     #[cfg(not(windows))]
-    mtx: pthread_mutex_t,
+    mtx: Box<pthread_mutex_t>,
 }
 
 impl RawLock {
-    fn new() -> Self {
+    fn new() -> Option<Self> {
         #[cfg(windows)]
         unsafe {
-            let mut cs: CRITICAL_SECTION = mem::zeroed();
-            InitializeCriticalSection(&mut cs);
-            Self { cs }
+            let mut cs = Box::new(mem::zeroed::<CRITICAL_SECTION>());
+            InitializeCriticalSection(&mut *cs);
+            Some(Self { cs })
         }
         #[cfg(not(windows))]
         unsafe {
-            let mut mtx: pthread_mutex_t = PTHREAD_MUTEX_INITIALIZER;
-            pthread_mutex_init(&mut mtx, ptr::null());
-            Self { mtx }
+            let mut mtx = Box::new(mem::zeroed::<pthread_mutex_t>());
+            if libc::pthread_mutex_init(&mut *mtx, ptr::null()) != 0 {
+                return None;
+            }
+            Some(Self { mtx })
         }
     }
 
     fn lock(&self) {
         #[cfg(windows)]
         unsafe {
-            EnterCriticalSection(&self.cs as *const _ as *mut _);
+            EnterCriticalSection(&*self.cs as *const _ as *mut _);
         }
         #[cfg(not(windows))]
         unsafe {
-            pthread_mutex_lock(&self.mtx as *const _ as *mut _);
+            libc::pthread_mutex_lock(&*self.mtx as *const _ as *mut _);
         }
     }
 
     fn unlock(&self) {
         #[cfg(windows)]
         unsafe {
-            LeaveCriticalSection(&self.cs as *const _ as *mut _);
+            LeaveCriticalSection(&*self.cs as *const _ as *mut _);
         }
         #[cfg(not(windows))]
         unsafe {
-            pthread_mutex_unlock(&self.mtx as *const _ as *mut _);
+            libc::pthread_mutex_unlock(&*self.mtx as *const _ as *mut _);
         }
     }
 }
@@ -849,11 +855,11 @@ impl Drop for RawLock {
     fn drop(&mut self) {
         #[cfg(windows)]
         unsafe {
-            DeleteCriticalSection(&mut self.cs);
+            DeleteCriticalSection(&mut *self.cs);
         }
         #[cfg(not(windows))]
         unsafe {
-            pthread_mutex_destroy(&mut self.mtx);
+            libc::pthread_mutex_destroy(&mut *self.mtx);
         }
     }
 }
@@ -866,17 +872,18 @@ struct ShareLockSet {
 }
 
 impl ShareLockSet {
-    fn new() -> Box<Self> {
+    fn new() -> Option<Box<Self>> {
         let locks: [RawLock; CURL_LOCK_DATA_LAST as usize] = [
-            RawLock::new(),
-            RawLock::new(),
-            RawLock::new(),
-            RawLock::new(),
-            RawLock::new(),
-            RawLock::new(),
-            RawLock::new(),
+            RawLock::new()?,
+            RawLock::new()?,
+            RawLock::new()?,
+            RawLock::new()?,
+            RawLock::new()?,
+            RawLock::new()?,
+            RawLock::new()?,
+            RawLock::new()?,
         ];
-        Box::new(Self { locks })
+        Some(Box::new(Self { locks }))
     }
 }
 
@@ -1164,9 +1171,8 @@ fn get_eintr_errno() -> c_int {
 
 #[no_mangle]
 pub unsafe extern "C" fn nativebridge_version() -> *const c_char {
-    // Built once into 'static storage; mirrors nativebridge.cpp's runtime string
-    // "NativeBridge <ver> [curlw] (curl X, ssl Y, nghttp2 Z)". curl is always
-    // linked into the Rust lib, so the [curlw] variant is always emitted.
+    // The Rust tag intentionally distinguishes this implementation from the
+    // legacy C++ build while preserving the shared component-version format.
     static VERSION: OnceLock<CString> = OnceLock::new();
     VERSION
         .get_or_init(|| {
@@ -1185,13 +1191,13 @@ pub unsafe extern "C" fn nativebridge_version() -> *const c_char {
                 (field(d.version), field(d.ssl_version), field(d.nghttp2_version))
             };
             let s = format!(
-                "NativeBridge {} [curlw] (curl {}, ssl {}, nghttp2 {})",
+                "NativeBridge {} [Rust] [curlw] (curl {}, ssl {}, nghttp2 {})",
                 env!("CARGO_PKG_VERSION"),
                 curl_v,
                 ssl_v,
                 h2_v
             );
-            CString::new(s).unwrap_or_else(|_| CString::new("NativeBridge").unwrap())
+            CString::new(s).unwrap_or_else(|_| CString::new("NativeBridge [Rust]").unwrap())
         })
         .as_ptr() as *const c_char
 }
@@ -2059,7 +2065,9 @@ pub unsafe extern "C" fn curlw_share_enable_default_locks(share: *mut CURLSH) ->
     if map.contains_key(&key) {
         return CURLSHE_OK;
     }
-    let ls = ShareLockSet::new();
+    let Some(ls) = ShareLockSet::new() else {
+        return CURLSHE_NOMEM;
+    };
     let lock_set_ptr = &*ls as *const ShareLockSet as *mut c_void;
     map.insert(key, ls);
 

@@ -8,5 +8,12 @@ ver: 1.0.0
 local: true
 cb_tool: custom
 
-# No `targets` restriction: NativeBridge is a container and builds on every
-# platform. Platform support is decided per feature in build1.ps1.
+# The Rust implementation currently bundles curlw unconditionally, so limit the
+# module to the target families implemented by build1.ps1.
+targets:
+  - win32
+  - linux
+  - android
+  - osx
+  - ios
+  - tvos

@@ -185,7 +185,7 @@ $env:NB_LIB_DIRS = @(
     "$nghttp3_dir/lib",
     "$ngtcp2_dir/lib",
     "$zlib_dir/lib"
-) -join ';'
+) -join [IO.Path]::PathSeparator
 
 Write-Host "  NB_CURL_LIBRARY=$env:NB_CURL_LIBRARY"
 Write-Host "  NB_SSL_LIBRARY=$env:NB_SSL_LIBRARY"
