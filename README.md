@@ -67,11 +67,12 @@ for example, if you use git to clone axmol(~80MB) and run it's `setup.ps1`, then
 
 ## NativeBridge (Unity / C#)
 
-`NativeBridge` is an aggregate native library for Unity: it links the curl HTTP/2+HTTP/3 stack (curl + BoringSSL + nghttp2/nghttp3/ngtcp2 + zlib) that 1kiss builds into a **single self-contained native library** per platform, and exposes a P/Invoke-friendly C ABI (`curlw_*`) plus a matching `Curlw.cs`. `curlw` is the first feature module; more can be added under `src/nativebridge/native/modules/`.
+`NativeBridge` is an aggregate native library for Unity: it links the curl HTTP/2+HTTP/3 stack (curl + BoringSSL + nghttp2/nghttp3/ngtcp2 + zlib) that 1kiss builds into a **single self-contained native library** per platform, and exposes a P/Invoke-friendly C ABI (`curlw_*`) plus a matching `Curlw.cs`. `curlw` is the first feature module; more can be added under `src/nativebridge/rust/src/modules/`.
 
 ### Layout
 
-- `src/nativebridge/native/` — C/C++ sources: `modules/curlw/{curlw.h,curlw.cpp}` (the authoritative ABI + curl wrapper; the small socket/timing helpers are inlined here), `nativebridge.{h,cpp}` (library core + `nativebridge_version()`), `CMakeLists.txt`.
+- `src/nativebridge/rust/src/` — active Rust implementation: `lib.rs` is the crate core; `modules/curlw/{mod.rs,bindings.rs,platform.rs}` contains the curl exports, raw libcurl FFI, and platform-specific support.
+- `src/nativebridge/native/` — authoritative C ABI headers plus the legacy C++ reference implementation.
 - `src/nativebridge/csharp/` — `Curlw.cs` (namespace `NativeBridge`) + `NativeBridge.asmdef`.
 - `src/nativebridge/build.yml` — `local: true` module, built last in the chain.
 - `src/nativebridge/{patch1,clean1,pack}.ps1` + `dist1.sh` — stage sources, trim the install tree, local build helper, and assemble the Unity package.
