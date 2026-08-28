@@ -14,10 +14,15 @@
 //   * namespace NativeBridgeF, LIBNAME "NativeBridge" (native library file name).
 //   * CURLMsg is read via curlw_msg_* accessors, not a mirrored struct layout.
 //   * setopt long vs off_t are distinct (curlw_easy_setopt_long / _offt).
+//   * strings cross the ABI as UTF-8: string params are encoded via Utf8Bytes
+//     (NUL-terminated byte[]) and returned char* values are read via
+//     PtrToStringUtf8. Never use CharSet.Ansi — on Windows it converts through
+//     the system ANSI code page (e.g. GBK) while libcurl expects UTF-8.
 //
 #if !UNITY_WEBGL
 using System;
 using System.Runtime.InteropServices;
+using System.Text;
 using CURLH = System.IntPtr;   // CURL*  (easy handle)
 using CURLMH = System.IntPtr;  // CURLM* (multi handle)
 
@@ -633,6 +638,40 @@ namespace NativeBridgeF
         public const string LIBNAME = "NativeBridge";
 #endif
 
+        // --- UTF-8 string marshalling ----------------------------------------
+        // byte[] parameters are copied verbatim by the P/Invoke marshaler (no
+        // code page conversion), so a NUL-terminated UTF-8 buffer is what
+        // libcurl sees. Keep every string-taking DllImport below on byte[] and
+        // expose only string overloads that go through these helpers.
+        private static byte[] Utf8Bytes(string s)
+        {
+            byte[] buf = new byte[Encoding.UTF8.GetByteCount(s) + 1];
+            Encoding.UTF8.GetBytes(s, 0, s.Length, buf, 0); // trailing byte stays 0
+            return buf;
+        }
+
+        // Reads a NUL-terminated UTF-8 C string. unsafe: pointer scan for the
+        // NUL terminator avoids one Marshal.ReadByte call per byte.
+        private static unsafe string PtrToStringUtf8(IntPtr p)
+        {
+            if (p == IntPtr.Zero) return null;
+            byte* b = (byte*)p;
+            int len = 0;
+            while (b[len] != 0) len++;
+            if (len == 0) return string.Empty;
+            return Encoding.UTF8.GetString(b, len);
+        }
+
+        // Reads a UTF-8 C buffer of exactly byteLen bytes (may embed NULs).
+        private static string PtrToStringUtf8(IntPtr p, int byteLen)
+        {
+            if (p == IntPtr.Zero || byteLen < 0) return null;
+            if (byteLen == 0) return string.Empty;
+            byte[] buf = new byte[byteLen];
+            Marshal.Copy(p, buf, 0, byteLen);
+            return Encoding.UTF8.GetString(buf);
+        }
+
         // --- version / ABI ---------------------------------------------------
         [DllImport(LIBNAME, CallingConvention = CallingConvention.Cdecl)]
         public static extern int curlw_abi_version();
@@ -642,7 +681,7 @@ namespace NativeBridgeF
 
         public static string curlw_version()
         {
-            return Marshal.PtrToStringAnsi(curlw_version_imp());
+            return PtrToStringUtf8(curlw_version_imp());
         }
 
         // NativeBridge library-level version string.
@@ -651,7 +690,7 @@ namespace NativeBridgeF
 
         public static string nativebridge_version()
         {
-            return Marshal.PtrToStringAnsi(nativebridge_version_imp());
+            return PtrToStringUtf8(nativebridge_version_imp());
         }
 
         // --- raw socket helpers ----------------------------------------------
@@ -729,7 +768,7 @@ namespace NativeBridgeF
 
         public static string curlw_easy_strerror(CURLcode error)
         {
-            return Marshal.PtrToStringAnsi(curlw_easy_strerror_imp(error));
+            return PtrToStringUtf8(curlw_easy_strerror_imp(error));
         }
 
         // setopt: typed variants (curl_easy_setopt is variadic; do NOT P/Invoke it directly).
@@ -842,8 +881,14 @@ namespace NativeBridgeF
             }
         }
 
-        [DllImport(LIBNAME, CallingConvention = CallingConvention.Cdecl, CharSet = CharSet.Ansi)]
-        public static extern CURLcode curlw_easy_setopt_string(CURLH handle, CURLoption option, string optval);
+        [DllImport(LIBNAME, CallingConvention = CallingConvention.Cdecl, EntryPoint = "curlw_easy_setopt_string")]
+        private static extern CURLcode curlw_easy_setopt_string_imp(CURLH handle, CURLoption option, byte[] optval);
+
+        // UTF-8 safe (see Utf8Bytes). Passing null resets the option to default.
+        public static CURLcode curlw_easy_setopt_string(CURLH handle, CURLoption option, string optval)
+        {
+            return curlw_easy_setopt_string_imp(handle, option, optval == null ? null : Utf8Bytes(optval));
+        }
 
         // getinfo: typed variants. Native code validates the CURLINFO type mask.
         [DllImport(LIBNAME, CallingConvention = CallingConvention.Cdecl)]
@@ -942,7 +987,7 @@ namespace NativeBridgeF
 
         public static string curlw_multi_strerror(CURLMcode error)
         {
-            return Marshal.PtrToStringAnsi(curlw_multi_strerror_imp(error));
+            return PtrToStringUtf8(curlw_multi_strerror_imp(error));
         }
 
         [DllImport(LIBNAME, CallingConvention = CallingConvention.Cdecl)]
@@ -957,8 +1002,14 @@ namespace NativeBridgeF
         [DllImport(LIBNAME, CallingConvention = CallingConvention.Cdecl)]
         public static extern CURLMcode curlw_multi_setopt_pointer(CURLMH multi_handle, int option, IntPtr optval);
 
-        [DllImport(LIBNAME, CallingConvention = CallingConvention.Cdecl, CharSet = CharSet.Ansi)]
-        public static extern CURLMcode curlw_multi_setopt_string(CURLMH multi_handle, int option, string optval);
+        [DllImport(LIBNAME, CallingConvention = CallingConvention.Cdecl, EntryPoint = "curlw_multi_setopt_string")]
+        private static extern CURLMcode curlw_multi_setopt_string_imp(CURLMH multi_handle, int option, byte[] optval);
+
+        // UTF-8 safe (see Utf8Bytes). Passing null resets the option to default.
+        public static CURLMcode curlw_multi_setopt_string(CURLMH multi_handle, int option, string optval)
+        {
+            return curlw_multi_setopt_string_imp(multi_handle, option, optval == null ? null : Utf8Bytes(optval));
+        }
 
         // Returns a pointer into curl-owned memory. Read its fields with the
         // curlw_msg_* accessors below (no fragile struct-layout marshalling).
@@ -975,8 +1026,14 @@ namespace NativeBridgeF
         public static extern CURLcode curlw_msg_get_result(IntPtr msg);
 
         // --- slist -----------------------------------------------------------
-        [DllImport(LIBNAME, CallingConvention = CallingConvention.Cdecl, CharSet = CharSet.Ansi)]
-        public static extern IntPtr curlw_slist_append(IntPtr list, string value);
+        [DllImport(LIBNAME, CallingConvention = CallingConvention.Cdecl, EntryPoint = "curlw_slist_append")]
+        private static extern IntPtr curlw_slist_append_imp(IntPtr list, byte[] value);
+
+        // UTF-8 safe (see Utf8Bytes).
+        public static IntPtr curlw_slist_append(IntPtr list, string value)
+        {
+            return curlw_slist_append_imp(list, value == null ? null : Utf8Bytes(value));
+        }
 
         [DllImport(LIBNAME, CallingConvention = CallingConvention.Cdecl)]
         public static extern void curlw_slist_free_all(IntPtr list);
@@ -1003,27 +1060,29 @@ namespace NativeBridgeF
         public static extern CURLcode curlw_easy_send(CURLH handle, byte[] buffer, UIntPtr buflen, out UIntPtr n);
 
         // Returns a curl-allocated string; the managed wrapper copies it and frees
-        // the native buffer for you.
-        [DllImport(LIBNAME, CallingConvention = CallingConvention.Cdecl, EntryPoint = "curlw_easy_escape", CharSet = CharSet.Ansi)]
-        private static extern IntPtr curlw_easy_escape_imp(CURLH handle, string s, int length);
+        // the native buffer for you. Input is encoded as UTF-8 (see Utf8Bytes).
+        [DllImport(LIBNAME, CallingConvention = CallingConvention.Cdecl, EntryPoint = "curlw_easy_escape")]
+        private static extern IntPtr curlw_easy_escape_imp(CURLH handle, byte[] s, int length);
 
         public static string curlw_easy_escape(CURLH handle, string s)
         {
-            IntPtr p = curlw_easy_escape_imp(handle, s, 0); // 0 => strlen
+            IntPtr p = curlw_easy_escape_imp(handle, s == null ? null : Utf8Bytes(s), 0); // 0 => strlen
             if (p == IntPtr.Zero) return null;
-            string r = Marshal.PtrToStringAnsi(p);
+            string r = PtrToStringUtf8(p);
             curlw_free(p);
             return r;
         }
 
-        [DllImport(LIBNAME, CallingConvention = CallingConvention.Cdecl, EntryPoint = "curlw_easy_unescape", CharSet = CharSet.Ansi)]
-        private static extern IntPtr curlw_easy_unescape_imp(CURLH handle, string s, int inlength, out int outlength);
+        // Input is encoded as UTF-8 (see Utf8Bytes); the decoded bytes are read
+        // back as UTF-8 with the exact outlength (they may contain any bytes).
+        [DllImport(LIBNAME, CallingConvention = CallingConvention.Cdecl, EntryPoint = "curlw_easy_unescape")]
+        private static extern IntPtr curlw_easy_unescape_imp(CURLH handle, byte[] s, int inlength, out int outlength);
 
         public static string curlw_easy_unescape(CURLH handle, string s)
         {
-            IntPtr p = curlw_easy_unescape_imp(handle, s, 0, out int outlen);
+            IntPtr p = curlw_easy_unescape_imp(handle, s == null ? null : Utf8Bytes(s), 0, out int outlen);
             if (p == IntPtr.Zero) return null;
-            string r = Marshal.PtrToStringAnsi(p, outlen);
+            string r = PtrToStringUtf8(p, outlen);
             curlw_free(p);
             return r;
         }
@@ -1040,47 +1099,55 @@ namespace NativeBridgeF
 
         [DllImport(LIBNAME, CallingConvention = CallingConvention.Cdecl, EntryPoint = "curlw_verinfo_version")]
         private static extern IntPtr curlw_verinfo_version_imp(IntPtr d);
-        public static string curlw_verinfo_version(IntPtr d) => Marshal.PtrToStringAnsi(curlw_verinfo_version_imp(d));
+        public static string curlw_verinfo_version(IntPtr d) => PtrToStringUtf8(curlw_verinfo_version_imp(d));
 
         [DllImport(LIBNAME, CallingConvention = CallingConvention.Cdecl, EntryPoint = "curlw_verinfo_ssl_version")]
         private static extern IntPtr curlw_verinfo_ssl_version_imp(IntPtr d);
-        public static string curlw_verinfo_ssl_version(IntPtr d) => Marshal.PtrToStringAnsi(curlw_verinfo_ssl_version_imp(d));
+        public static string curlw_verinfo_ssl_version(IntPtr d) => PtrToStringUtf8(curlw_verinfo_ssl_version_imp(d));
 
         [DllImport(LIBNAME, CallingConvention = CallingConvention.Cdecl, EntryPoint = "curlw_verinfo_libz_version")]
         private static extern IntPtr curlw_verinfo_libz_version_imp(IntPtr d);
-        public static string curlw_verinfo_libz_version(IntPtr d) => Marshal.PtrToStringAnsi(curlw_verinfo_libz_version_imp(d));
+        public static string curlw_verinfo_libz_version(IntPtr d) => PtrToStringUtf8(curlw_verinfo_libz_version_imp(d));
 
         [DllImport(LIBNAME, CallingConvention = CallingConvention.Cdecl, EntryPoint = "curlw_verinfo_nghttp2_version")]
         private static extern IntPtr curlw_verinfo_nghttp2_version_imp(IntPtr d);
-        public static string curlw_verinfo_nghttp2_version(IntPtr d) => Marshal.PtrToStringAnsi(curlw_verinfo_nghttp2_version_imp(d));
+        public static string curlw_verinfo_nghttp2_version(IntPtr d) => PtrToStringUtf8(curlw_verinfo_nghttp2_version_imp(d));
 
         [DllImport(LIBNAME, CallingConvention = CallingConvention.Cdecl, EntryPoint = "curlw_verinfo_quic_version")]
         private static extern IntPtr curlw_verinfo_quic_version_imp(IntPtr d);
-        public static string curlw_verinfo_quic_version(IntPtr d) => Marshal.PtrToStringAnsi(curlw_verinfo_quic_version_imp(d));
+        public static string curlw_verinfo_quic_version(IntPtr d) => PtrToStringUtf8(curlw_verinfo_quic_version_imp(d));
 
         [DllImport(LIBNAME, CallingConvention = CallingConvention.Cdecl, EntryPoint = "curlw_verinfo_cainfo")]
         private static extern IntPtr curlw_verinfo_cainfo_imp(IntPtr d);
-        public static string curlw_verinfo_cainfo(IntPtr d) => Marshal.PtrToStringAnsi(curlw_verinfo_cainfo_imp(d));
+        public static string curlw_verinfo_cainfo(IntPtr d) => PtrToStringUtf8(curlw_verinfo_cainfo_imp(d));
 
         [DllImport(LIBNAME, CallingConvention = CallingConvention.Cdecl, EntryPoint = "curlw_verinfo_capath")]
         private static extern IntPtr curlw_verinfo_capath_imp(IntPtr d);
-        public static string curlw_verinfo_capath(IntPtr d) => Marshal.PtrToStringAnsi(curlw_verinfo_capath_imp(d));
+        public static string curlw_verinfo_capath(IntPtr d) => PtrToStringUtf8(curlw_verinfo_capath_imp(d));
 
         // --- header API ------------------------------------------------------
-        [DllImport(LIBNAME, CallingConvention = CallingConvention.Cdecl, CharSet = CharSet.Ansi)]
-        public static extern CURLHcode curlw_easy_header(CURLH handle, string name, UIntPtr nameindex,
-                                                         uint origin, int request, out IntPtr hout);
+        [DllImport(LIBNAME, CallingConvention = CallingConvention.Cdecl, EntryPoint = "curlw_easy_header")]
+        private static extern CURLHcode curlw_easy_header_imp(CURLH handle, byte[] name, UIntPtr nameindex,
+                                                              uint origin, int request, out IntPtr hout);
+
+        // UTF-8 safe (see Utf8Bytes).
+        public static CURLHcode curlw_easy_header(CURLH handle, string name, UIntPtr nameindex,
+                                                  uint origin, int request, out IntPtr hout)
+        {
+            return curlw_easy_header_imp(handle, name == null ? null : Utf8Bytes(name),
+                                         nameindex, origin, request, out hout);
+        }
 
         [DllImport(LIBNAME, CallingConvention = CallingConvention.Cdecl)]
         public static extern IntPtr curlw_easy_nextheader(CURLH handle, uint origin, int request, IntPtr prev);
 
         [DllImport(LIBNAME, CallingConvention = CallingConvention.Cdecl, EntryPoint = "curlw_header_name")]
         private static extern IntPtr curlw_header_name_imp(IntPtr h);
-        public static string curlw_header_name(IntPtr h) => Marshal.PtrToStringAnsi(curlw_header_name_imp(h));
+        public static string curlw_header_name(IntPtr h) => PtrToStringUtf8(curlw_header_name_imp(h));
 
         [DllImport(LIBNAME, CallingConvention = CallingConvention.Cdecl, EntryPoint = "curlw_header_value")]
         private static extern IntPtr curlw_header_value_imp(IntPtr h);
-        public static string curlw_header_value(IntPtr h) => Marshal.PtrToStringAnsi(curlw_header_value_imp(h));
+        public static string curlw_header_value(IntPtr h) => PtrToStringUtf8(curlw_header_value_imp(h));
 
         [DllImport(LIBNAME, CallingConvention = CallingConvention.Cdecl)]
         public static extern UIntPtr curlw_header_amount(IntPtr h);
@@ -1107,7 +1174,7 @@ namespace NativeBridgeF
 
         [DllImport(LIBNAME, CallingConvention = CallingConvention.Cdecl, EntryPoint = "curlw_share_strerror_imp")]
         private static extern IntPtr curlw_share_strerror_imp(CURLSHcode error);
-        public static string curlw_share_strerror(CURLSHcode error) => Marshal.PtrToStringAnsi(curlw_share_strerror_imp(error));
+        public static string curlw_share_strerror(CURLSHcode error) => PtrToStringUtf8(curlw_share_strerror_imp(error));
 
         // --- MIME ------------------------------------------------------------
         [DllImport(LIBNAME, CallingConvention = CallingConvention.Cdecl)]
@@ -1119,8 +1186,14 @@ namespace NativeBridgeF
         [DllImport(LIBNAME, CallingConvention = CallingConvention.Cdecl)]
         public static extern IntPtr curlw_mime_addpart(IntPtr mime);
 
-        [DllImport(LIBNAME, CallingConvention = CallingConvention.Cdecl, CharSet = CharSet.Ansi)]
-        public static extern CURLcode curlw_mime_name(IntPtr part, string name);
+        [DllImport(LIBNAME, CallingConvention = CallingConvention.Cdecl, EntryPoint = "curlw_mime_name")]
+        private static extern CURLcode curlw_mime_name_imp(IntPtr part, byte[] name);
+
+        // UTF-8 safe (see Utf8Bytes).
+        public static CURLcode curlw_mime_name(IntPtr part, string name)
+        {
+            return curlw_mime_name_imp(part, name == null ? null : Utf8Bytes(name));
+        }
 
         // Pass the exact byte length as datasize. Do NOT pass UIntPtr.MaxValue
         // (curl's CURL_ZERO_TERMINATED): with a byte[] the marshaller does not
@@ -1129,17 +1202,41 @@ namespace NativeBridgeF
         [DllImport(LIBNAME, CallingConvention = CallingConvention.Cdecl)]
         public static extern CURLcode curlw_mime_data(IntPtr part, byte[] data, UIntPtr datasize);
 
-        [DllImport(LIBNAME, CallingConvention = CallingConvention.Cdecl, CharSet = CharSet.Ansi)]
-        public static extern CURLcode curlw_mime_filedata(IntPtr part, string filename);
+        [DllImport(LIBNAME, CallingConvention = CallingConvention.Cdecl, EntryPoint = "curlw_mime_filedata")]
+        private static extern CURLcode curlw_mime_filedata_imp(IntPtr part, byte[] filename);
 
-        [DllImport(LIBNAME, CallingConvention = CallingConvention.Cdecl, CharSet = CharSet.Ansi)]
-        public static extern CURLcode curlw_mime_filename(IntPtr part, string filename);
+        // UTF-8 safe (see Utf8Bytes).
+        public static CURLcode curlw_mime_filedata(IntPtr part, string filename)
+        {
+            return curlw_mime_filedata_imp(part, filename == null ? null : Utf8Bytes(filename));
+        }
 
-        [DllImport(LIBNAME, CallingConvention = CallingConvention.Cdecl, CharSet = CharSet.Ansi)]
-        public static extern CURLcode curlw_mime_type(IntPtr part, string mimetype);
+        [DllImport(LIBNAME, CallingConvention = CallingConvention.Cdecl, EntryPoint = "curlw_mime_filename")]
+        private static extern CURLcode curlw_mime_filename_imp(IntPtr part, byte[] filename);
 
-        [DllImport(LIBNAME, CallingConvention = CallingConvention.Cdecl, CharSet = CharSet.Ansi)]
-        public static extern CURLcode curlw_mime_encoder(IntPtr part, string encoding);
+        // UTF-8 safe (see Utf8Bytes).
+        public static CURLcode curlw_mime_filename(IntPtr part, string filename)
+        {
+            return curlw_mime_filename_imp(part, filename == null ? null : Utf8Bytes(filename));
+        }
+
+        [DllImport(LIBNAME, CallingConvention = CallingConvention.Cdecl, EntryPoint = "curlw_mime_type")]
+        private static extern CURLcode curlw_mime_type_imp(IntPtr part, byte[] mimetype);
+
+        // UTF-8 safe (see Utf8Bytes).
+        public static CURLcode curlw_mime_type(IntPtr part, string mimetype)
+        {
+            return curlw_mime_type_imp(part, mimetype == null ? null : Utf8Bytes(mimetype));
+        }
+
+        [DllImport(LIBNAME, CallingConvention = CallingConvention.Cdecl, EntryPoint = "curlw_mime_encoder")]
+        private static extern CURLcode curlw_mime_encoder_imp(IntPtr part, byte[] encoding);
+
+        // UTF-8 safe (see Utf8Bytes).
+        public static CURLcode curlw_mime_encoder(IntPtr part, string encoding)
+        {
+            return curlw_mime_encoder_imp(part, encoding == null ? null : Utf8Bytes(encoding));
+        }
 
         [DllImport(LIBNAME, CallingConvention = CallingConvention.Cdecl)]
         public static extern CURLcode curlw_mime_headers(IntPtr part, IntPtr headers, int take_ownership);
@@ -1163,17 +1260,23 @@ namespace NativeBridgeF
         public static CURLUcode curlw_url_get(IntPtr handle, CURLUPart what, out string part, uint flags)
         {
             CURLUcode ec = curlw_url_get_imp(handle, what, out IntPtr p, flags);
-            part = (ec == CURLUcode.CURLUE_OK && p != IntPtr.Zero) ? Marshal.PtrToStringAnsi(p) : null;
+            part = (ec == CURLUcode.CURLUE_OK && p != IntPtr.Zero) ? PtrToStringUtf8(p) : null;
             if (p != IntPtr.Zero) curlw_free(p);
             return ec;
         }
 
-        [DllImport(LIBNAME, CallingConvention = CallingConvention.Cdecl, CharSet = CharSet.Ansi)]
-        public static extern CURLUcode curlw_url_set(IntPtr handle, CURLUPart what, string part, uint flags);
+        [DllImport(LIBNAME, CallingConvention = CallingConvention.Cdecl, EntryPoint = "curlw_url_set")]
+        private static extern CURLUcode curlw_url_set_imp(IntPtr handle, CURLUPart what, byte[] part, uint flags);
+
+        // UTF-8 safe (see Utf8Bytes). Passing null clears the part.
+        public static CURLUcode curlw_url_set(IntPtr handle, CURLUPart what, string part, uint flags)
+        {
+            return curlw_url_set_imp(handle, what, part == null ? null : Utf8Bytes(part), flags);
+        }
 
         [DllImport(LIBNAME, CallingConvention = CallingConvention.Cdecl, EntryPoint = "curlw_url_strerror_imp")]
         private static extern IntPtr curlw_url_strerror_imp(CURLUcode error);
-        public static string curlw_url_strerror(CURLUcode error) => Marshal.PtrToStringAnsi(curlw_url_strerror_imp(error));
+        public static string curlw_url_strerror(CURLUcode error) => PtrToStringUtf8(curlw_url_strerror_imp(error));
 
         // --- WebSocket -------------------------------------------------------
         [DllImport(LIBNAME, CallingConvention = CallingConvention.Cdecl)]
