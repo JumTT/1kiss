@@ -21,6 +21,7 @@
 //
 #if !UNITY_WEBGL
 using System;
+using System.Collections.Generic;
 using System.Runtime.InteropServices;
 using System.Text;
 using CURLH = System.IntPtr;   // CURL*  (easy handle)
@@ -556,27 +557,6 @@ namespace NativeBridgeF
         CURLINFO_SSL_DATA_OUT, /* 6 */
     }
 
-    /// <summary>
-    /// Mirrors struct curl_waitfd (multi.h) for curlw_multi_poll/wait.
-    /// WARNING: the native <c>fd</c> field is <c>curl_socket_t</c>, whose width is
-    /// platform-dependent — 8 bytes on Win64 (SOCKET = UINT_PTR) but only 4 bytes
-    /// on 64-bit POSIX (int). This managed struct uses <see cref="IntPtr"/> (8 bytes),
-    /// so <c>Marshal.SizeOf&lt;CurlWaitFd&gt;()</c> == 12/16 does NOT match the
-    /// native 8-byte layout on Linux/macOS/Android. Do NOT marshal a
-    /// <c>CurlWaitFd[]</c> across the ABI on those platforms. The exposed
-    /// curlw_multi_poll/wait overloads take <c>IntPtr extra_fds</c> precisely so
-    /// this struct is never marshalled as an array by the binding itself; it is
-    /// provided only for callers that build the array manually on Windows or with
-    /// their own platform-correct layout.
-    /// </summary>
-    [StructLayout(LayoutKind.Sequential)]
-    public struct CurlWaitFd
-    {
-        public IntPtr fd;   // curl_socket_t (SOCKET on Win64 = 64-bit; int on POSIX)
-        public short events;
-        public short revents;
-    }
-
     public static class CURLWaitPoll
     {
         public const short CURL_WAIT_POLLIN  = 0x0001;
@@ -797,21 +777,13 @@ namespace NativeBridgeF
         private static extern CURLcode curlw_easy_setopt_pointer_cb_imp(CURLH handle, CURLoption option, CurlwWriteDataDelegate optval);
 
         // Per-handle strong references to callback delegates (write/read/...).
-        private static readonly System.Collections.Generic.Dictionary<IntPtr, System.Collections.Generic.List<Delegate>>
-            s_handleCallbacks = new System.Collections.Generic.Dictionary<IntPtr, System.Collections.Generic.List<Delegate>>();
+        private static readonly Dictionary<IntPtr, List<Delegate>>
+            s_handleCallbacks = new Dictionary<IntPtr, List<Delegate>>();
         private static readonly object s_cbLock = new object();
 
         public static CURLcode curlw_easy_setopt_pointer(CURLH handle, CURLoption option, CurlwWriteDataDelegate optval)
         {
-            lock (s_cbLock)
-            {
-                if (!s_handleCallbacks.TryGetValue(handle, out var list))
-                {
-                    list = new System.Collections.Generic.List<Delegate>();
-                    s_handleCallbacks[handle] = list;
-                }
-                list.Add(optval); // keep alive until the handle is cleaned up/reset
-            }
+            KeepAliveCallback(handle, optval);
             return curlw_easy_setopt_pointer_cb_imp(handle, option, optval);
         }
 
@@ -827,7 +799,7 @@ namespace NativeBridgeF
             {
                 if (!s_handleCallbacks.TryGetValue(handle, out var list))
                 {
-                    list = new System.Collections.Generic.List<Delegate>();
+                    list = new List<Delegate>();
                     s_handleCallbacks[handle] = list;
                 }
                 list.Add(cb);

@@ -1,6 +1,4 @@
-#![allow(non_camel_case_types)]
 #![allow(unused_macros)]
-#![allow(non_upper_case_globals)]
 #![allow(nonstandard_style)]
 #![allow(dead_code)]
 #![allow(private_interfaces)]
@@ -24,7 +22,7 @@ pub unsafe extern "C" fn nativebridge_version() -> *const c_char {
                 ssl_v,
                 h2_v
             );
-            CString::new(s).unwrap_or_else(|_| CString::new("NativeBridge [Rust]").unwrap())
+            CString::new(s).unwrap()
         })
         .as_ptr()
 }
