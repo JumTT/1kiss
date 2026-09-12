@@ -32,7 +32,9 @@ mkdir -p "$OUT/Runtime" "$OUT/Plugins"
 
 # --- C# runtime sources -----------------------------------------------------
 cp -f src/nativebridge/csharp/Curlw.cs "$OUT/Runtime/" 2>/dev/null || echo "WARN: Curlw.cs missing"
-cp -f src/nativebridge/csharp/NativeBridge.asmdef "$OUT/Runtime/" 2>/dev/null || true
+cp -f src/nativebridge/csharp/Vfs.cs "$OUT/Runtime/" 2>/dev/null || echo "WARN: Vfs.cs missing"
+cp -f src/nativebridge/csharp/DownloadManager.cs "$OUT/Runtime/" 2>/dev/null || echo "WARN: DownloadManager.cs missing"
+cp -f src/nativebridge/csharp/NativeBridgeF.asmdef "$OUT/Runtime/" 2>/dev/null || echo "WARN: NativeBridgeF.asmdef missing"
 
 # --- helper: copy a file if it exists, else warn ---------------------------
 copy_if() { # src dstdir
