@@ -149,5 +149,83 @@ namespace NativeBridgeF.Tests.Vfs
             }
             finally { VfsDLL.vfs_close(h); }
         }
+
+        [Test]
+        // 批量 12 文件 → 删 6 → 增写 6 新文件（交错）→ Deleted 记账精确、Garbage==0 →
+        // 异步整理（reserve=0）→ Deleted 条目消失、幸存 12 个内容逐一完好、
+        // garbage/deleted 归 0、physical == logical（截垃圾）、Finalize bump generation。
+        public void BulkDeleteWriteInterleave_CompactPreserves()
+        {
+            int[] sizes = { 1 << 12, 1 << 16, (1 << 18) + 1 }; // 12 文件 ≈ 1.3MB
+            var content = new List<byte[]>();
+            IntPtr h = VfsTestUtil.Open(_dir);
+            try
+            {
+                for (int i = 0; i < 12; i++)
+                {
+                    byte[] d = VfsTestUtil.Pattern(sizes[i % 3], (byte)(i + 1));
+                    content.Add(d);
+                    VfsTestUtil.SeqWrite(h, "f" + i, d);
+                }
+                ulong deletedSpan = 0;
+                for (int i = 0; i < 12; i += 2)
+                {
+                    VfsTestUtil.AssertOk(VfsDLL.vfs_delete(h, VfsTestUtil.Utf8("f" + i)), "delete f" + i);
+                    deletedSpan += VfsTestUtil.Align4k((ulong)sizes[i % 3]);
+                }
+                for (int i = 0; i < 6; i++)
+                {
+                    byte[] d = VfsTestUtil.Pattern(sizes[i % 3], (byte)(50 + i));
+                    content.Add(d);
+                    VfsTestUtil.SeqWrite(h, "g" + i, d);
+                }
+
+                VfsStatInfo before = VfsTestUtil.Stat(h);
+                Assert.AreEqual(deletedSpan, before.Deleted);
+                Assert.AreEqual(0UL, before.Garbage); // 增写新名不产生替换垃圾
+            }
+            finally { VfsDLL.vfs_close(h); }
+
+            using (var r = VfsReader.Open(_dir))
+            {
+                r.RefreshIndex();
+                Assert.AreEqual(18, r.Count);
+                r.ReleaseMapping(); // Windows：映射存续期间无法 truncate，整理前必须释放
+
+                int doneErr = -1;
+                var doneEvent = new ManualResetEvent(false);
+                _doneCb = (user, err) => { doneErr = err; doneEvent.Set(); };
+                ulong genBefore = r.Generation;
+
+                r.Compact(0, null, _doneCb, IntPtr.Zero);
+                Assert.IsTrue(doneEvent.WaitOne(15000), "compaction done 超时");
+                Assert.AreEqual((int)VfsResult.OK, doneErr, "整理失败");
+
+                r.RefreshIndex(); // 整理后先刷新索引，再重建映射（offset 可能整体偏移）
+                Assert.AreEqual(12, r.Count);
+                VfsEntry gone;
+                for (int i = 0; i < 12; i += 2) Assert.IsFalse(r.TryGet("f" + i, out gone), "f" + i);
+
+                r.EnsureMapping();
+                for (int i = 1; i < 12; i += 2)
+                {
+                    byte[] got;
+                    Assert.IsTrue(r.TryReadBytes("f" + i, out got), "f" + i);
+                    CollectionAssert.AreEqual(content[i], got);
+                }
+                for (int i = 0; i < 6; i++)
+                {
+                    byte[] got;
+                    Assert.IsTrue(r.TryReadBytes("g" + i, out got), "g" + i);
+                    CollectionAssert.AreEqual(content[12 + i], got);
+                }
+
+                VfsStatInfo after = r.Stat();
+                Assert.AreEqual(0UL, after.Deleted);
+                Assert.AreEqual(0UL, after.Garbage);
+                Assert.AreEqual(after.Logical, after.Physical); // reserve=0：物理恰为新逻辑大小
+                Assert.Greater(r.Generation, genBefore);        // Finalize bump
+            }
+        }
     }
 }
