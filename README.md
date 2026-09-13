@@ -3,11 +3,11 @@
 [1kiss NativeBridge](https://github.com/JumTT/1kiss/tree/main/src/nativebridge)(面向 Unity 的聚合原生库)的测试工程,Unity 版本 **2022.3**。
 
 > 本分支是 orphan 分支,独立于 `main`,仅用于测试,**不会合并回 main**。
-> 预编译二进制不入库,只提交 `.meta`。
+> 预编译二进制直接入库,clone 后无需额外下载。
 
-## 获取二进制
+## 更新二进制
 
-从 [nativebridge workflow](https://github.com/JumTT/1kiss/actions/workflows/nativebridge.yml) 下载最新 artifact,把里面的原生库解压到 `Assets/Plugins/NativeBridge/Plugins/`(对应平台目录已有占位的 `.meta`,保持原位即可)。
+NativeBridge 上游更新后,从 [nativebridge workflow](https://github.com/JumTT/1kiss/actions/workflows/nativebridge.yml) 下载最新 artifact,覆盖 `Assets/Plugins/NativeBridge/Plugins/` 下的对应文件并提交。
 
 ## 运行
 
