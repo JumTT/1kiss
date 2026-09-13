@@ -107,11 +107,3 @@ InitTestScene*.unity*
 
 # Auto-generated cache in Assets folder
 /[Aa]ssets/[Ss]ceneDependencyCache*
-
-# NativeBridge prebuilt binaries: fetch them from the 1kiss "nativebridge"
-# workflow artifact instead (https://github.com/JumTT/1kiss/actions).
-# Their .meta files stay committed.
-/[Aa]ssets/Plugins/NativeBridge/Plugins/**/*.so
-/[Aa]ssets/Plugins/NativeBridge/Plugins/**/*.dll
-/[Aa]ssets/Plugins/NativeBridge/Plugins/**/*.a
-/[Aa]ssets/Plugins/NativeBridge/Plugins/**/*.dylib
