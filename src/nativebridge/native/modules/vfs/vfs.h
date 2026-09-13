@@ -6,8 +6,10 @@
 //   * is decorated with NATIVEBRIDGE_API (exported),
 //   * uses NATIVEBRIDGE_CALL == cdecl (matches CallingConvention.Cdecl in C#).
 //
-// Model (design doc §2): a VFS directory holds `header.vfs` (index, double
-// buffered, never exposed to C#) and `files.vfs` (pure 4K-aligned data blob).
+// Model (design doc §2): a VFS container holds an index file (`header.vfs`,
+// double buffered, never exposed to C#) and a data file (`files.vfs`, pure
+// 4K-aligned data blob); the path-based vfs_open_paths names both files
+// individually.
 // Index queries are answered from the in-memory index (zero file I/O); C# maps
 // files.vfs via MemoryMappedFile and reads Active entries directly. commit
 // makes data visible immediately and never moves it (compaction is exclusive
@@ -21,10 +23,10 @@
 // the object alive internally even if close races it, but callers should not
 // rely on that.
 //
-// Single instance per directory: opening the same directory twice yields two
-// independent in-memory indexes over the same header.vfs/files.vfs and is
+// Single instance per container (index/data pair): opening the same pair twice
+// yields two independent in-memory indexes over the same files and is
 // UNSUPPORTED (each instance would flip the shared SuperBlock blindly) — the
-// host must keep exactly one open handle per directory.
+// host must keep exactly one open handle per index/data pair.
 //
 // Callback keep-alive: the native side stores RAW function pointers. C#
 // delegates marshalled as these pointers MUST stay strongly referenced for as
@@ -109,6 +111,15 @@ NATIVEBRIDGE_API int NATIVEBRIDGE_CALL vfs_abi_version(void);
 // (their space becomes garbage); physical bytes beyond the logical size are
 // ignored. Returns NULL on failure (VFS_IO / VFS_INVALID_ARG).
 NATIVEBRIDGE_API void*  NATIVEBRIDGE_CALL vfs_open(const char* dir);
+// Path-based open (additive superset of vfs_open): the index and data files are
+// named individually — same-directory custom names and different directories
+// both work. Parent directories and the files themselves are created on demand;
+// recovery semantics are identical to vfs_open. Rejected with NULL
+// (VFS_INVALID_ARG): an empty (or whitespace-only) path, or index_path ==
+// data_path under a string comparison (trimmed, case-folded — no symlink/
+// hardlink canonicalization). Purely additive export: VFS_ABI_VERSION unchanged.
+NATIVEBRIDGE_API void*  NATIVEBRIDGE_CALL vfs_open_paths(const char* index_path,
+                                                         const char* data_path);
 // Releases the handle. Pair every successful open with exactly one close.
 NATIVEBRIDGE_API void   NATIVEBRIDGE_CALL vfs_close(void* h);
 

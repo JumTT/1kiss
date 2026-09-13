@@ -81,6 +81,15 @@ fn ioerr(_: io::Error) -> VfsError {
     VfsError::Io
 }
 
+/// 路径式打开的父目录按需创建；裸文件名（父目录为空）落在当前目录——
+/// std 的 create_dir_all 对空路径直接返回 Ok，无需自己判断。
+fn ensure_parent(file: &Path) -> Result<(), VfsError> {
+    if let Some(dir) = file.parent() {
+        std::fs::create_dir_all(dir).map_err(ioerr)?;
+    }
+    Ok(())
+}
+
 fn code(r: Result<(), VfsError>) -> i32 {
     match r {
         Ok(()) => VFS_OK,
@@ -142,8 +151,10 @@ struct RegionLayout {
 pub(crate) type VfsCommitFn = unsafe extern "C" fn(user: *mut c_void, name: *const c_char, off: u64, size: u64, crc: u32);
 
 struct VfsShared {
-    dir: PathBuf,
-    /// files.vfs：set_len 扩容 / fsync 用。写数据一律走 writer/整理的独立句柄。
+    /// files.vfs 实际路径：writer/整理重开句柄用。目录版 open 拼固定名，
+    /// 路径版 open_paths 原样传入（索引文件路径打开后只经 header_file 句柄
+    /// 访问，无需保存）。写数据一律走 writer/整理的独立句柄。
+    data_path: PathBuf,
     data_file: Mutex<File>,
     header_file: Mutex<File>,
     /// 序列化 region + SuperBlock 翻转的互斥（flush 与整理 Finalize 共用）。
@@ -158,10 +169,6 @@ struct VfsShared {
 }
 
 impl VfsShared {
-    fn data_path(&self) -> PathBuf {
-        self.dir.join("files.vfs")
-    }
-
     /// 写 inactive region（放不下则尾部追加）→ fsync header → 原地翻 SuperBlock.active_gen → fsync。
     /// 水位线防御：gen 低于已持久化水位线的滞后调用（旧 flush 与整理 Finalize 竞速）
     /// 返回 GenChanged，防止把 SuperBlock 翻回旧 region；等于水位线放行——同 gen 的
@@ -241,26 +248,41 @@ pub(crate) struct Vfs {
 }
 
 impl Vfs {
-    /// 打开（或初始化）一个 VFS 目录。恢复协议见设计 §2.2：
-    /// SuperBlock 损坏扫描双 region 取 gen 最高且校验通过者；Downloading 残留丢弃；
-    /// 逻辑大小之外的物理残留忽略。
+    /// 打开（或初始化）一个 VFS 目录：拼固定名 header.vfs + files.vfs 后走
+    /// open_paths（目录版薄壳，仅为兼容保留）。
     pub(crate) fn open(dir: &Path) -> Result<Vfs, VfsError> {
-        std::fs::create_dir_all(dir).map_err(ioerr)?;
-        let dir = dir.to_path_buf();
+        Self::open_paths(&dir.join("header.vfs"), &dir.join("files.vfs"))
+    }
+
+    /// 打开（或初始化）一对 VFS 文件：index 为双缓冲索引（目录版叫 header.vfs），
+    /// data 为 4K 对齐数据区（目录版叫 files.vfs），两者可任意命名/异目录。
+    /// 恢复协议见设计 §2.2：SuperBlock 损坏扫描双 region 取 gen 最高且校验通过
+    /// 者；Downloading 残留丢弃；逻辑大小之外的物理残留忽略。
+    pub(crate) fn open_paths(index: &Path, data: &Path) -> Result<Vfs, VfsError> {
+        // 防呆：空路径（含纯空白），或两路径指向同一文件（去空白 + 大小写折叠
+        // 的字符串级比较，不做 symlink/硬链接规范化）——索引与数据同文件会让
+        // 双缓冲索引 pwrite 到数据区上，毁库。
+        let norm = |p: &Path| p.to_string_lossy().trim().to_lowercase();
+        let (ni, nd) = (norm(index), norm(data));
+        if ni.is_empty() || nd.is_empty() || ni == nd {
+            return Err(VfsError::InvalidArg);
+        }
+        ensure_parent(index)?;
+        ensure_parent(data)?;
         let data_file = OpenOptions::new()
             .read(true)
             .write(true)
             .create(true)
-            .open(dir.join("files.vfs"))
+            .open(data)
             .map_err(ioerr)?;
         let header_file = OpenOptions::new()
             .read(true)
             .write(true)
             .create(true)
-            .open(dir.join("header.vfs"))
+            .open(index)
             .map_err(ioerr)?;
 
-        let header_bytes = std::fs::read(dir.join("header.vfs")).unwrap_or_default();
+        let header_bytes = std::fs::read(index).unwrap_or_default();
         let sb_gen = format::read_sb(&header_bytes);
         // 顺序扫描 region 槽位（头部不可读即终止——后续槽位无法定位）。
         let mut slots: Vec<SlotScan> = Vec::new();
@@ -329,7 +351,7 @@ impl Vfs {
         }
 
         let shared = Arc::new(VfsShared {
-            dir,
+            data_path: data.to_path_buf(),
             data_file: Mutex::new(data_file),
             header_file: Mutex::new(header_file),
             persist_lock: Mutex::new(()),
@@ -388,7 +410,7 @@ impl Vfs {
         }
         drop(g);
         // 每写入者独立 OS 句柄（Windows 同句柄并发 pwrite 不安全）。
-        let file = match OpenOptions::new().read(true).write(true).open(self.shared.data_path()) {
+        let file = match OpenOptions::new().read(true).write(true).open(&self.shared.data_path) {
             Ok(f) => f,
             Err(_) => {
                 if let Ok(mut g) = self.shared.inner.lock() {
@@ -714,6 +736,18 @@ pub unsafe extern "C" fn vfs_abi_version() -> c_int {
 pub unsafe extern "C" fn vfs_open(dir: *const c_char) -> *mut c_void {
     let Ok(d) = cstr_arg(dir) else { return ptr::null_mut() };
     match Vfs::open(Path::new(&d)) {
+        Ok(v) => Arc::into_raw(Arc::new(v)) as *mut c_void,
+        Err(_) => ptr::null_mut(),
+    }
+}
+
+/// 路径式打开：索引与数据文件分别指定（vfs_open 的超集，同目录异名、异目录
+/// 皆可）。纯新增导出，不 bump VFS_ABI_VERSION。防呆拒绝（空路径/同路径）与
+/// IO 失败均返回 NULL。
+#[no_mangle]
+pub unsafe extern "C" fn vfs_open_paths(index: *const c_char, data: *const c_char) -> *mut c_void {
+    let (Ok(i), Ok(d)) = (cstr_arg(index), cstr_arg(data)) else { return ptr::null_mut() };
+    match Vfs::open_paths(Path::new(&i), Path::new(&d)) {
         Ok(v) => Arc::into_raw(Arc::new(v)) as *mut c_void,
         Err(_) => ptr::null_mut(),
     }
@@ -1501,5 +1535,60 @@ mod tests {
         unsafe { vfs_close(h) }; // 优雅 close：best-effort flush
         let v2 = Vfs::open(&td.0).unwrap();
         assert!(v2.lookup("f1").is_ok());
+    }
+
+    /// 路径式打开：自定义文件名成对可用（含父目录按需创建），索引/数据异目录，
+    /// 目录版薄壳在固定名 header.vfs/files.vfs 上独立成库互不串扰。
+    #[test]
+    fn open_paths_custom_names() {
+        let td = TempDir::new();
+        let idx = td.0.join("sub1").join("base.idx");
+        let dat = td.0.join("sub2").join("base.dat");
+        let v = Vfs::open_paths(&idx, &dat).unwrap();
+        seq_write(&v, "f1", &[7u8; 10]).unwrap();
+        v.flush().unwrap();
+        drop(v);
+        assert!(idx.exists() && dat.exists());
+        let v2 = Vfs::open_paths(&idx, &dat).unwrap();
+        assert_eq!(v2.lookup("f1").unwrap().size, 10);
+        // 目录版薄壳：固定名是另一对文件，看不到自定义库的内容
+        let v3 = Vfs::open(&td.0).unwrap();
+        assert!(v3.lookup("f1").is_err());
+    }
+
+    /// 路径式打开防呆：同一路径（含大小写/空白差异）与空路径拒绝（InvalidArg）。
+    #[test]
+    fn open_paths_rejects_bad_args() {
+        let td = TempDir::new();
+        let p = td.0.join("same.vfs");
+        assert!(matches!(Vfs::open_paths(&p, &p), Err(VfsError::InvalidArg)));
+        assert!(matches!(
+            Vfs::open_paths(&p, &td.0.join("SAME.VFS")),
+            Err(VfsError::InvalidArg)
+        ));
+        assert!(matches!(
+            Vfs::open_paths(Path::new(""), Path::new("x")),
+            Err(VfsError::InvalidArg)
+        ));
+        assert!(matches!(
+            Vfs::open_paths(Path::new("x"), Path::new("  ")),
+            Err(VfsError::InvalidArg)
+        ));
+    }
+
+    /// FFI vfs_open_paths：导出可用、失败返回 NULL（目录版 vfs_open 的 FFI
+    /// 语义由 close_flushes_pending_commits 覆盖）。
+    #[test]
+    fn ffi_open_paths() {
+        let td = TempDir::new();
+        let i = CString::new(td.0.join("i.vfs").to_str().unwrap()).unwrap();
+        let d = CString::new(td.0.join("d.vfs").to_str().unwrap()).unwrap();
+        let h = unsafe { vfs_open_paths(i.as_ptr(), d.as_ptr()) };
+        assert!(!h.is_null());
+        unsafe { vfs_close(h) }; // 先 close：Windows 下打开的句柄会挡住 TempDir 清理
+        // 防呆经 FFI：同路径 → NULL（顺带钉死 index/data 参数顺序不颠倒）
+        let same = CString::new(td.0.join("x.vfs").to_str().unwrap()).unwrap();
+        assert!(unsafe { vfs_open_paths(same.as_ptr(), same.as_ptr()) }.is_null());
+        assert!(unsafe { vfs_open_paths(ptr::null(), d.as_ptr()) }.is_null());
     }
 }

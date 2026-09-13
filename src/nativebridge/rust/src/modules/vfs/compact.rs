@@ -145,11 +145,11 @@ fn compact_run(shared: &VfsShared, reserve_extra: u64, progress: Option<Progress
 
         // --- Move ---
         shared.ctl.state.store(COMPACT_MOVE, Ordering::Relaxed);
-        let rd = match File::open(shared.data_path()) {
+        let rd = match File::open(&shared.data_path) {
             Ok(f) => f,
             Err(_) => return Err(VfsError::Io),
         };
-        let wr = match OpenOptions::new().write(true).open(shared.data_path()) {
+        let wr = match OpenOptions::new().write(true).open(&shared.data_path) {
             Ok(f) => f,
             Err(_) => return Err(VfsError::Io),
         };

@@ -96,6 +96,10 @@ Idle → Scan → Move → Finalize → Idle
 
 ```
 vfs_open(dir) → handle                       vfs_close(handle)
+vfs_open_paths(index_path, data_path) → handle   // 路径式打开：索引/数据分别指定，
+                                                 // 可同目录异名或异目录；空路径或
+                                                 // 同一路径（去空白+大小写折叠比较）
+                                                 // → INVALID_ARG。纯新增，ABI 版本不变。
 vfs_flush(handle)
 vfs_alloc(handle, name, size) → writer       vfs_writer_write(w, rel_off, buf, len)
                                              vfs_writer_commit(w) | vfs_writer_abort(w)
@@ -114,7 +118,7 @@ vfs_compact_status(h) → state, percent
 
 ### 2.5 C# 侧（`csharp/Vfs.cs`）
 
-`VfsReader`：`Open(dir)`；`RefreshIndex()`（enumerate → `Dictionary<string,(off,size,state,crc)>`，对比 physical 变化则重建 mapping）；`TryGet(name)`；`ReadRaw(name)` → 非托管指针 + 长度（unsafe，映射视图内切片）；generation 轮询或 commit 回调触发刷新。
+`VfsReader`：`Open(indexPath, dataPath)`（路径式主构造）与 `Open(dir)`（目录薄壳重载，等价 `dir/header.vfs + dir/files.vfs`）；属性 `IndexFilePath` / `DataFilePath`；`RefreshIndex()`（enumerate → `Dictionary<string,(off,size,state,crc)>`，对比 physical 变化则重建 mapping）；`TryGet(name)`；`ReadRaw(name)` → 非托管指针 + 长度（unsafe，映射视图内切片）；generation 轮询或 commit 回调触发刷新。
 
 ## 3. 方案二：dlmgr
 
