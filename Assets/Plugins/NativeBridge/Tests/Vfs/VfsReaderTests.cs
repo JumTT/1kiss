@@ -146,5 +146,45 @@ namespace NativeBridgeF.Tests.Vfs
                 CollectionAssert.AreEqual(b, gb);
             }
         }
+
+        [Test]
+        // 测试重点：路径式打开 VfsReader.Open(indexPath, dataPath)——自定义名容器上
+        // RefreshIndex/EnsureMapping/TryReadBytes 全链路可用；IndexFilePath/DataFilePath
+        // 如实回显；目录版 Open(dir) 薄壳仍走固定名对（独立空容器）；index==data 触发
+        // 原生防呆返回 NULL → 封装层抛 IOException。
+        public void Reader_OpenPaths_CustomContainer_FullRoundtrip()
+        {
+            string idx = System.IO.Path.Combine(_dir, "pack.idx");
+            string dat = System.IO.Path.Combine(_dir, "pack.dat");
+            byte[] a = VfsTestUtil.Pattern(3000, 9);
+
+            IntPtr h = VfsDLL.vfs_open_paths(VfsTestUtil.Utf8(idx), VfsTestUtil.Utf8(dat));
+            Assert.AreNotEqual(IntPtr.Zero, h);
+            try { VfsTestUtil.SeqWrite(h, "f1", a); }
+            finally { VfsDLL.vfs_close(h); }
+
+            using (var r = VfsReader.Open(idx, dat))
+            {
+                Assert.AreEqual(idx, r.IndexFilePath);
+                Assert.AreEqual(dat, r.DataFilePath);
+                r.RefreshIndex();
+                r.EnsureMapping();
+                byte[] got;
+                Assert.IsTrue(r.TryReadBytes("f1", out got));
+                CollectionAssert.AreEqual(a, got);
+            }
+
+            // 目录版薄壳：固定名 header.vfs/files.vfs 是独立的空容器
+            using (var r = VfsReader.Open(_dir))
+            {
+                r.RefreshIndex();
+                Assert.AreEqual(0, r.Count);
+                Assert.AreEqual(System.IO.Path.Combine(_dir, "header.vfs"), r.IndexFilePath);
+                Assert.AreEqual(System.IO.Path.Combine(_dir, "files.vfs"), r.DataFilePath);
+            }
+
+            Assert.Throws<System.IO.IOException>(() => VfsReader.Open(idx, idx),
+                "index==data 应触发原生防呆（NULL → IOException）");
+        }
     }
 }

@@ -87,5 +87,74 @@ namespace NativeBridgeF.Tests.Vfs
                 CollectionAssert.AreEqual(b, gotB);
             }
         }
+
+        [Test]
+        // 测试重点：路径式打开 vfs_open_paths——索引/数据文件分别指定（自定义文件名、
+        // 异目录），父目录按需创建；close 自带落盘（Q11），重开 lookup 的内容状态/crc
+        // 完好；目录版薄壳（vfs_open = 固定名 header.vfs + files.vfs）是独立的另一对，
+        // 与自定义容器互不串扰（镜像 Rust open_paths_custom_names）。
+        public void OpenPaths_CustomNames_DifferentDirs_IndependentOfDirOpen()
+        {
+            string idx = System.IO.Path.Combine(_dir, "sub1", "base.idx");
+            string dat = System.IO.Path.Combine(_dir, "sub2", "base.dat");
+            byte[] a = VfsTestUtil.Pattern(5000, 3);
+
+            IntPtr h = VfsDLL.vfs_open_paths(VfsTestUtil.Utf8(idx), VfsTestUtil.Utf8(dat));
+            Assert.AreNotEqual(IntPtr.Zero, h, "vfs_open_paths " + idx);
+            try { VfsTestUtil.SeqWrite(h, "f1", a); }
+            finally { VfsDLL.vfs_close(h); }
+
+            Assert.IsTrue(System.IO.File.Exists(idx), "索引文件应按需创建于自定义路径");
+            Assert.IsTrue(System.IO.File.Exists(dat), "数据文件应按需创建于自定义路径");
+
+            IntPtr h2 = VfsDLL.vfs_open_paths(VfsTestUtil.Utf8(idx), VfsTestUtil.Utf8(dat));
+            Assert.AreNotEqual(IntPtr.Zero, h2, "重开自定义容器");
+            try
+            {
+                ulong off, size; int state; uint crc;
+                VfsTestUtil.AssertOk(VfsDLL.vfs_lookup(h2, VfsTestUtil.Utf8("f1"),
+                    out off, out size, out state, out crc), "lookup");
+                Assert.AreEqual((ulong)a.Length, size);
+                Assert.AreEqual((int)VfsFileState.Active, state);
+                Assert.AreEqual(VfsTestUtil.Crc32(a), crc);
+            }
+            finally { VfsDLL.vfs_close(h2); }
+
+            // 目录版薄壳：固定名是另一对文件——空库（generation=1）、无自定义容器内容
+            IntPtr h3 = VfsTestUtil.Open(_dir);
+            try
+            {
+                Assert.AreEqual(1UL, VfsDLL.vfs_get_generation(h3));
+                ulong off, size; int state; uint crc;
+                Assert.AreEqual((int)VfsResult.NotFound,
+                    VfsDLL.vfs_lookup(h3, VfsTestUtil.Utf8("f1"), out off, out size, out state, out crc),
+                    "目录版固定名容器不应看到自定义容器的内容");
+            }
+            finally { VfsDLL.vfs_close(h3); }
+        }
+
+        [Test]
+        // 测试重点：vfs_open_paths 防呆——同一路径（含大小写差异，Windows 文件名
+        // 不区分大小写）、空路径、纯空白路径一律返回 NULL（INVALID_ARG），绝不打开
+        // 成"索引=数据"的毁库形态；且防呆不误伤正常的不同路径打开
+        // （镜像 Rust open_paths_rejects_bad_args）。
+        public void OpenPaths_RejectsBadArgs()
+        {
+            string p = System.IO.Path.Combine(_dir, "same.vfs");
+            string upper = System.IO.Path.Combine(_dir, "SAME.VFS");
+            Assert.AreEqual(IntPtr.Zero, VfsDLL.vfs_open_paths(VfsTestUtil.Utf8(p), VfsTestUtil.Utf8(p)),
+                "同一路径应被拒绝");
+            Assert.AreEqual(IntPtr.Zero, VfsDLL.vfs_open_paths(VfsTestUtil.Utf8(p), VfsTestUtil.Utf8(upper)),
+                "大小写差异的同一路径应被拒绝");
+            Assert.AreEqual(IntPtr.Zero, VfsDLL.vfs_open_paths(VfsTestUtil.Utf8(""), VfsTestUtil.Utf8(p)),
+                "空索引路径应被拒绝");
+            Assert.AreEqual(IntPtr.Zero, VfsDLL.vfs_open_paths(VfsTestUtil.Utf8(p), VfsTestUtil.Utf8("   ")),
+                "纯空白数据路径应被拒绝");
+
+            IntPtr ok = VfsDLL.vfs_open_paths(VfsTestUtil.Utf8(p),
+                VfsTestUtil.Utf8(System.IO.Path.Combine(_dir, "other.vfs")));
+            Assert.AreNotEqual(IntPtr.Zero, ok, "不同路径不应被防呆误伤");
+            VfsDLL.vfs_close(ok);
+        }
     }
 }

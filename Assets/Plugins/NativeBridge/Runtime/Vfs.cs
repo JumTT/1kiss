@@ -134,6 +134,13 @@ namespace NativeBridgeF
         [DllImport(LIBNAME, CallingConvention = CallingConvention.Cdecl)]
         public static extern IntPtr vfs_open(byte[] dir);
 
+        // Path-based open: index and data files named individually (additive
+        // superset of vfs_open; VFS_ABI_VERSION unchanged). The native side
+        // rejects an empty/whitespace path or index == data (trimmed,
+        // case-folded string compare) by returning IntPtr.Zero.
+        [DllImport(LIBNAME, CallingConvention = CallingConvention.Cdecl)]
+        public static extern IntPtr vfs_open_paths(byte[] index, byte[] data);
+
         [DllImport(LIBNAME, CallingConvention = CallingConvention.Cdecl)]
         public static extern void vfs_close(IntPtr h);
 
@@ -209,8 +216,9 @@ namespace NativeBridgeF
     }
 
     /// <summary>
-    /// Read-side convenience over a VFS directory: keeps the native handle and a
-    /// string→entry index in sync. The MemoryMappedFile view of files.vfs is NOT
+    /// Read-side convenience over a VFS container (one index/data file pair):
+    /// keeps the native handle and a string→entry index in sync. The
+    /// MemoryMappedFile view of the data file is NOT
     /// managed implicitly — its establish/rebuild/release timing is fully under
     /// the caller's control via EnsureMapping()/ReleaseMapping().
     ///
@@ -224,7 +232,7 @@ namespace NativeBridgeF
     public sealed class VfsReader : IDisposable
     {
         private IntPtr _h;
-        private readonly string _dir;
+        private readonly string _indexPath;
         private readonly string _dataPath;
         private readonly Dictionary<string, VfsEntry> _index = new Dictionary<string, VfsEntry>();
         private ulong _refreshedGen;
@@ -242,26 +250,43 @@ namespace NativeBridgeF
         // bounded by the number of registrations, cleared on Dispose).
         private readonly List<VfsCommitDelegate> _commitKeepAlive = new List<VfsCommitDelegate>();
 
-        public string Dir { get { return _dir; } }
+        public string IndexFilePath { get { return _indexPath; } }
         public string DataFilePath { get { return _dataPath; } }
 
-        private VfsReader(IntPtr handle, string dir)
+        private VfsReader(IntPtr handle, string indexPath, string dataPath)
         {
             _h = handle;
-            _dir = dir;
-            _dataPath = Path.Combine(dir, "files.vfs");
+            _indexPath = indexPath;
+            _dataPath = dataPath;
         }
 
-        /// <summary>Opens (or initializes) the VFS directory. Throws IOException on failure.</summary>
+        /// <summary>
+        /// Path-based open: names the index and data files individually (parent
+        /// directories and the files themselves are created on demand). Throws
+        /// IOException on failure — including the native side's guards (an
+        /// empty/whitespace path, or the same path for index and data under a
+        /// trimmed, case-folded string compare).
+        /// </summary>
+        public static VfsReader Open(string indexPath, string dataPath)
+        {
+            if (indexPath == null) throw new ArgumentNullException("indexPath");
+            if (dataPath == null) throw new ArgumentNullException("dataPath");
+            IntPtr h = VfsDLL.vfs_open_paths(DlmgrDLL.Utf8Bytes(indexPath), DlmgrDLL.Utf8Bytes(dataPath));
+            if (h == IntPtr.Zero)
+            {
+                throw new IOException("vfs_open_paths failed for " + indexPath + " + " + dataPath);
+            }
+            return new VfsReader(h, indexPath, dataPath);
+        }
+
+        /// <summary>
+        /// Directory-based open: opens (or initializes) the VFS container
+        /// dir/header.vfs + dir/files.vfs. Throws IOException on failure.
+        /// </summary>
         public static VfsReader Open(string dir)
         {
             if (dir == null) throw new ArgumentNullException("dir");
-            IntPtr h = VfsDLL.vfs_open(DlmgrDLL.Utf8Bytes(dir));
-            if (h == IntPtr.Zero)
-            {
-                throw new IOException("vfs_open failed for " + dir);
-            }
-            return new VfsReader(h, dir);
+            return Open(Path.Combine(dir, "header.vfs"), Path.Combine(dir, "files.vfs"));
         }
 
         /// <summary>ABI guard for diagnostics: must equal VfsDLL-side VFS_ABI_VERSION (1).</summary>
