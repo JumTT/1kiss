@@ -127,5 +127,40 @@ namespace NativeBridgeF.Tests.Vfs
                 }
             }
         }
+
+        [Test]
+        // vfs_open_paths 批量场景：index/data 任意命名且异目录（目录版固定
+        // header.vfs/files.vfs 同目录），父目录按需创建。批量写 → flush close →
+        // 双路径重开全量字节比对；默认名文件不得被误建到目录根。
+        public void BulkWrite_OpenPaths_SplitIndexData_ContentIntact()
+        {
+            string indexPath = System.IO.Path.Combine(_dir, "idx", "i.vfs");
+            string dataPath = System.IO.Path.Combine(_dir, "dat", "d.vfs");
+            List<byte[]> content;
+            IntPtr h = VfsDLL.vfs_open_paths(VfsTestUtil.Utf8(indexPath), VfsTestUtil.Utf8(dataPath));
+            Assert.AreNotEqual(IntPtr.Zero, h, "vfs_open_paths");
+            try
+            {
+                content = WriteBulk(h, 4);
+                VfsTestUtil.AssertOk(VfsDLL.vfs_flush(h), "flush");
+            }
+            finally { VfsDLL.vfs_close(h); }
+
+            Assert.IsTrue(System.IO.File.Exists(indexPath), indexPath);
+            Assert.IsFalse(System.IO.File.Exists(System.IO.Path.Combine(_dir, "header.vfs"))); // 未误建默认名
+
+            using (var r = VfsReader.Open(indexPath, dataPath))
+            {
+                r.RefreshIndex();
+                Assert.AreEqual(content.Count, r.Count);
+                r.EnsureMapping();
+                for (int i = 0; i < content.Count; i++)
+                {
+                    byte[] got;
+                    Assert.IsTrue(r.TryReadBytes("bulk" + (i + 1), out got), "bulk" + (i + 1));
+                    CollectionAssert.AreEqual(content[i], got);
+                }
+            }
+        }
     }
 }
