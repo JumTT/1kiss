@@ -1,3 +1,7 @@
+//! curlw：libcurl 封装模块。本目录 `#[no_mangle] extern "C"` 导出集是 curlw C ABI
+//! 的权威契约（单一事实源），C# 侧 1:1 镜像见 `csharp/Curlw.cs`：改动既有签名/布局
+//! 须 bump `CURLW_ABI_VERSION`，纯新增导出不 bump。
+
 use libc::{c_char, c_double, c_int, c_long, c_uint, c_void, intptr_t, size_t};
 #[cfg(not(windows))]
 use libc::{pthread_mutex_t, EINTR, ETIMEDOUT, SHUT_RDWR};
@@ -118,9 +122,12 @@ pub(crate) fn version_components() -> (String, String, String) {
     }
 }
 
+/// curlw C ABI 版本。
+pub const CURLW_ABI_VERSION: c_int = 1;
+
 #[no_mangle]
 pub unsafe extern "C" fn curlw_abi_version() -> c_int {
-    1
+    CURLW_ABI_VERSION
 }
 
 #[no_mangle]

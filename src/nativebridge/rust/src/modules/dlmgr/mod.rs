@@ -5,6 +5,8 @@
 //! * 线程模型（Q5）：N 条 worker 阻塞跑 curl easy 单任务；reporter 10Hz 回调（Q16）。
 //! * FFI 惯例与 curlw 一致：UTF-8 `*const c_char`、opaque 句柄、cdecl、
 //!   panic=abort 下 FFI 边界不做 catch_unwind。curlw_global_init 由宿主（C#）负责。
+//! * C ABI 权威契约：本目录 FFI 导出即 dlmgr ABI 的单一事实源（C# 镜像：
+//!   csharp/DownloadManager.cs）；改动既有签名须 bump DLMGR_ABI_VERSION。
 pub(crate) mod curlw_backend;
 pub(crate) mod rate;
 pub(crate) mod report;
@@ -374,8 +376,10 @@ pub unsafe extern "C" fn dlmgr_shutdown(mgr: *mut c_void) {
     drop(Box::from_raw(mgr as *mut Arc<Shared>));
 }
 
-/// DLMGR_ABI_VERSION（dlmgr.h 同步）。
+/// dlmgr C ABI 版本。
+pub const DLMGR_ABI_VERSION: i32 = 1;
+
 #[no_mangle]
 pub unsafe extern "C" fn dlmgr_abi_version() -> i32 {
-    1
+    DLMGR_ABI_VERSION
 }

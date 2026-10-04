@@ -9,7 +9,7 @@ Blocks: T6
 
 ## 范围
 
-- `native/modules/vfs/vfs.h`（`VFS_ABI_VERSION 1`）+ Rust `#[no_mangle] extern "C"` 导出全集：open/close/flush/alloc/writer 三件套/delete/lookup/enumerate 两段式/get_generation/commit 回调/stat/compact/compact_status。
+- Rust `#[no_mangle] extern "C"` 导出全集（权威 C ABI 契约：`rust/src/modules/vfs/mod.rs`，`VFS_ABI_VERSION 1`）：open/close/flush/alloc/writer 三件套/delete/lookup/enumerate 两段式/get_generation/commit 回调/stat/compact/compact_status。
 - 惯例：UTF-8 `*const c_char`、opaque 句柄、out 参数、错误码 i32、回调 keep-alive 语义写入头注释。
 - `csharp/Vfs.cs`：手写 P/Invoke（cdecl、`byte[]` UTF-8、禁 `CharSet.Ansi`），`VfsReader`：`RefreshIndex()`（enumerate → `Dictionary`，检测 physical 变化重建 `MemoryMappedFile`）、`TryGet`、`ReadRaw`（unsafe 指针切片）、generation 轮询 + 可选 commit 回调事件。
 - `build1.ps1`/`build.yml` 无需变更（Rust 模块无条件打包），验证 cdylib 导出表含全部 `vfs_*` 符号。

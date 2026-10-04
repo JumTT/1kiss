@@ -1,10 +1,10 @@
 //
 // Curlw.cs — C# binding for the NativeBridge "curlw" module.
 //
-// This is the managed mirror of the native contract declared in
-//   src/nativebridge/native/modules/curlw/curlw.h
-// Keep the two in lock-step: every P/Invoke below matches a NATIVEBRIDGE_API
-// function 1:1 (cdecl calling convention, same argument widths).
+// This is the managed mirror of the native contract exported by
+//   src/nativebridge/rust/src/modules/curlw/mod.rs
+// Keep the two in lock-step: every P/Invoke below matches a #[no_mangle]
+// export 1:1 (cdecl calling convention, same argument widths).
 //
 // Rationale: libcurl's curl_easy_setopt / curl_easy_getinfo are variadic, which
 // P/Invoke marshals unreliably. The native curlw layer exposes fixed-arity typed
@@ -607,7 +607,7 @@ namespace NativeBridgeF
     public delegate int CurlwSocketManagedDelegate(IntPtr sockfd, IntPtr userptr);
 
     /// <summary>
-    /// Thin 1:1 binding of the native curlw C ABI (see curlw.h). All entry points
+    /// Thin 1:1 binding of the native curlw C ABI (see modules/curlw/mod.rs). All entry points
     /// use cdecl to match NATIVEBRIDGE_CALL.
     /// </summary>
     public static class CurlwDLL

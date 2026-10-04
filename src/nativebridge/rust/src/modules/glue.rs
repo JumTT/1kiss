@@ -9,7 +9,7 @@
 //! * `abort()`       → `writer.abort`（条目丢弃，区间成垃圾）
 //!
 //! 生命周期：句柄经 `dlmgr_sink_release`（任务终态后由宿主调用）经注册表 dtor 回收；
-//! `vfs` 句柄存活期必须覆盖每个由它创建的 sink（vfs.h 已注明宿主约定）。
+//! `vfs` 句柄存活期必须覆盖每个由它创建的 sink（vfs 模块文档中的宿主约定）。
 
 use std::ffi::CStr;
 use std::slice;

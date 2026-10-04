@@ -5,7 +5,7 @@
 # dot-sourced in the same function scope, $rust_target, $target_os, $target_cpu
 # are all visible here through PowerShell scope inheritance.
 #
-# Output layout mirrors the old CMake build:
+# Output layout:
 #   Windows:  install_dir/bin/NativeBridge.dll
 #   Linux/Android: install_dir/lib/libNativeBridge.so
 #   macOS:    install_dir/lib/libNativeBridge.dylib

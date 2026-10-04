@@ -1,10 +1,10 @@
 //
 // DownloadManager.cs — C# binding for the NativeBridge "dlmgr" module.
 //
-// This is the managed mirror of the native contract declared in
-//   src/nativebridge/native/modules/dlmgr/dlmgr.h
-// Keep the two in lock-step: every P/Invoke below matches a NATIVEBRIDGE_API
-// function 1:1 (cdecl calling convention, same argument widths).
+// This is the managed mirror of the native contract exported by
+//   src/nativebridge/rust/src/modules/dlmgr/mod.rs
+// Keep the two in lock-step: every P/Invoke below matches a #[no_mangle]
+// export 1:1 (cdecl calling convention, same argument widths).
 //
 // Design notes:
 //   * namespace NativeBridgeF, LIBNAME "NativeBridge" (native library file name),
@@ -46,7 +46,7 @@ using System.Text;
 
 namespace NativeBridgeF
 {
-    // --- enums (values mirror dlmgr.h) -----------------------------------------
+    // --- enums (values mirror the native ABI) -----------------------------------------
     public enum DlmgrTaskState
     {
         Pending = 0,
@@ -86,7 +86,7 @@ namespace NativeBridgeF
                                              ulong bps);
 
     /// <summary>
-    /// Thin 1:1 binding of the native dlmgr C ABI (see dlmgr.h).
+    /// Thin 1:1 binding of the native dlmgr C ABI (see modules/dlmgr/mod.rs).
     /// </summary>
     public static class DlmgrDLL
     {

@@ -172,8 +172,8 @@ rust:   src/nativebridge/rust/src/modules/
           vfs/{mod.rs, format.rs, index.rs, compact.rs}
           dlmgr/{mod.rs, task.rs, worker.rs, rate.rs, report.rs, curlw_backend.rs}
           glue.rs                                       # vfs↔dlmgr 桥，唯一同时依赖两者处
-C ABI:  src/nativebridge/native/modules/vfs/vfs.h       # VFS_ABI_VERSION 1
-        src/nativebridge/native/modules/dlmgr/dlmgr.h   # DLMGR_ABI_VERSION 1
+C ABI:  rust/src/modules/vfs/mod.rs   # VFS_ABI_VERSION 1（权威契约）
+        rust/src/modules/dlmgr/mod.rs # DLMGR_ABI_VERSION 1（权威契约）
 C#:     src/nativebridge/csharp/Vfs.cs, DownloadManager.cs
 ```
 

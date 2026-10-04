@@ -1,10 +1,10 @@
 //
 // Vfs.cs — C# binding for the NativeBridge "vfs" module.
 //
-// This is the managed mirror of the native contract declared in
-//   src/nativebridge/native/modules/vfs/vfs.h
-// Keep the two in lock-step: every P/Invoke below matches a NATIVEBRIDGE_API
-// function 1:1 (cdecl calling convention, same argument widths).
+// This is the managed mirror of the native contract exported by
+//   src/nativebridge/rust/src/modules/vfs/mod.rs
+// Keep the two in lock-step: every P/Invoke below matches a #[no_mangle]
+// export 1:1 (cdecl calling convention, same argument widths).
 //
 // Design notes:
 //   * namespace NativeBridgeF, LIBNAME "NativeBridge" (native library file name),
@@ -35,7 +35,7 @@ using System.Text;
 
 namespace NativeBridgeF
 {
-    // --- result / state enums (values mirror vfs.h) ---------------------------
+    // --- result / state enums (values mirror the native ABI) ---------------------------
     public enum VfsResult
     {
         OK = 0,
@@ -113,7 +113,7 @@ namespace NativeBridgeF
     public delegate void VfsDoneDelegate(IntPtr user, int err);
 
     /// <summary>
-    /// Thin 1:1 binding of the native vfs C ABI (see vfs.h).
+    /// Thin 1:1 binding of the native vfs C ABI (see modules/vfs/mod.rs).
     /// </summary>
     public static class VfsDLL
     {

@@ -71,15 +71,14 @@ for example, if you use git to clone axmol(~80MB) and run it's `setup.ps1`, then
 
 ### Layout
 
-- `src/nativebridge/rust/src/` — active Rust implementation: `lib.rs` is the crate core; `modules/curlw/{mod.rs,bindings.rs,platform.rs}` contains the curl exports, raw libcurl FFI, and platform-specific support.
-- `src/nativebridge/native/` — authoritative C ABI headers plus the legacy C++ reference implementation.
+- `src/nativebridge/rust/src/` — the sole NativeBridge implementation (Rust; the former legacy C++ reference implementation was removed): `lib.rs` is the crate core; `modules/curlw/{mod.rs,bindings.rs,platform.rs}` contains the curl exports, raw libcurl FFI, and platform-specific support. Each module's `#[no_mangle]` exports are the authoritative C ABI, mirrored 1:1 by the C# files.
 - `src/nativebridge/csharp/` — `Curlw.cs` (namespace `NativeBridge`) + `NativeBridge.asmdef`.
 - `src/nativebridge/build.yml` — `local: true` module, built last in the chain.
 - `src/nativebridge/{patch1,clean1,pack}.ps1` + `dist1.sh` — stage sources, trim the install tree, local build helper, and assemble the Unity package.
 
 ### Versioning
 
-- SemVer, single source of truth = `src/nativebridge/build.yml` `ver:`. `curlw.h` carries `CURLW_ABI_VERSION` (bump on any signature/layout change).
+- SemVer, single source of truth = `src/nativebridge/build.yml` `ver:`. ABI versions are consts in the Rust modules: `CURLW_ABI_VERSION` (`modules/curlw/mod.rs`), `VFS_ABI_VERSION` (`modules/vfs/mod.rs`), `DLMGR_ABI_VERSION` (`modules/dlmgr/mod.rs`) — bump on any signature/layout change; purely additive exports don't bump.
 - Locked components: curl 8.21.0 / boringssl 0.20260803.0 / nghttp2 1.70.0 / nghttp3 1.18.0 / ngtcp2 1.25.0 / zlib 1.3.2.
 - `nativebridge_version()` returns a runtime string of the library + component versions.
 

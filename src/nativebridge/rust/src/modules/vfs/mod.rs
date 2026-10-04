@@ -8,6 +8,9 @@
 //! * 线程模型：`Vfs` 多线程共享（内部全 Mutex/原子）；单个 writer 限创建方使用（Send 即可）。
 //! * FFI 惯例与 curlw 一致：UTF-8 `*const c_char`、opaque 句柄、错误码 i32、
 //!   panic=abort 下 FFI 边界不做 catch_unwind。
+//! * C ABI 权威契约：本目录 FFI 导出即 vfs ABI 的单一事实源（C# 镜像：csharp/Vfs.cs），
+//!   改动既有签名须 bump VFS_ABI_VERSION，纯新增导出不 bump。同一 index/data 对
+//!   只允许一个打开句柄：双实例会各自盲目翻转共享的 SuperBlock（宿主约定）。
 pub(crate) mod compact;
 pub(crate) mod format;
 pub(crate) mod index;
@@ -727,9 +730,12 @@ unsafe fn cstr_arg(p: *const c_char) -> Result<String, VfsError> {
     CStr::from_ptr(p).to_str().map(|s| s.to_string()).map_err(|_| VfsError::InvalidArg)
 }
 
+/// vfs C ABI 版本。
+pub const VFS_ABI_VERSION: c_int = 1;
+
 #[no_mangle]
 pub unsafe extern "C" fn vfs_abi_version() -> c_int {
-    1
+    VFS_ABI_VERSION
 }
 
 #[no_mangle]
