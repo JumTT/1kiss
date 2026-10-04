@@ -38,6 +38,9 @@
 //     consuming retries); disconnects resume with "Range: bytes=off-"
 //     in-session; full_url failures consume the retry budget with 1s/2s/4s
 //     exponential backoff, then the task fails.
+//   * Priority (native): enqueue-time ordering only (larger first, FIFO tie,
+//     no preemption). Queued tasks can be re-prioritized via
+//     dlmgr_set_priority; running/retired tasks return -1.
 //
 #if !UNITY_WEBGL
 using System;
@@ -170,6 +173,12 @@ namespace NativeBridgeF
 
         [DllImport(LIBNAME, CallingConvention = CallingConvention.Cdecl)]
         public static extern int dlmgr_cancel_all(IntPtr mgr);
+
+        // 动态改排队中任务的下载权重（priority 大者先派发、同级 FIFO、不抢占）。
+        // 仅排队中的任务可改：运行中不可抢占、终态已退役、id 不存在，返回 -1。
+        // paused 期间同样生效。
+        [DllImport(LIBNAME, CallingConvention = CallingConvention.Cdecl)]
+        public static extern int dlmgr_set_priority(IntPtr mgr, ulong taskId, int priority);
 
         // Stops dispatching new tasks; running tasks run to completion. Use
         // dlmgr_active_count == 0 as the compaction precondition.

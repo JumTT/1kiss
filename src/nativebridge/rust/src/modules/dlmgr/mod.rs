@@ -128,6 +128,33 @@ impl Shared {
         removed
     }
 
+    /// 改排队中任务的下载权重（priority 大者先派发）：drain 重排即可，队列短，
+    /// O(n) 足够。仅排队中的任务可改——运行中不可抢占、终态已退役，均返回 false。
+    /// 同级排序沿用原 seq（FIFO 不变）。锁序：queue 单锁，无嵌套。
+    fn set_priority(&self, id: u64, priority: i32) -> bool {
+        let mut q = self.queue.lock().unwrap();
+        if q.heap.is_empty() {
+            return false;
+        }
+        let mut changed = false;
+        let kept: Vec<HeapTask> = q
+            .heap
+            .drain()
+            .map(|ht| {
+                if ht.task.id == id {
+                    changed = true;
+                    HeapTask { priority, seq: ht.seq, task: ht.task }
+                } else {
+                    ht
+                }
+            })
+            .collect();
+        for ht in kept {
+            q.heap.push(ht);
+        }
+        changed
+    }
+
     /// 已排队任务的取消：直接终态（worker 未运行它，不碰 sink）。
     /// 先 err 后 state（Release），与 worker::terminal 同纪律。
     fn mark_canceled(&self, t: &TaskShared) {
@@ -207,7 +234,8 @@ pub unsafe extern "C" fn dlmgr_start(mgr: *mut c_void) -> i32 {
     0
 }
 
-/// 入队任务（priority 大者先取、同级 FIFO、不抢占）。sink 为已注册 sink 的句柄。
+/// 入队任务（priority 大者先取、同级 FIFO、不抢占；排队中可经
+/// dlmgr_set_priority 动态改权重）。sink 为已注册 sink 的句柄。
 /// full_url 可为 NULL/空 = 无兜底。task_id 出参可空。成功 *task_id = id，返回 0。
 #[no_mangle]
 pub unsafe extern "C" fn dlmgr_enqueue(
@@ -274,6 +302,15 @@ pub unsafe extern "C" fn dlmgr_cancel_all(mgr: *mut c_void) -> i32 {
     let Some(sh) = shared(mgr) else { return -1 };
     sh.cancel_all();
     0
+}
+
+/// 动态改排队中任务的下载权重（priority 大者先派发、同级 FIFO、不抢占）。
+/// 仅排队中的任务可改：运行中不可抢占、终态已退役、id 不存在，均返回 -1。
+/// paused 期间同样生效；纯新增导出，不 bump DLMGR_ABI_VERSION。
+#[no_mangle]
+pub unsafe extern "C" fn dlmgr_set_priority(mgr: *mut c_void, task_id: u64, priority: i32) -> i32 {
+    let Some(sh) = shared(mgr) else { return -1 };
+    if sh.set_priority(task_id, priority) { 0 } else { -1 }
 }
 
 /// 暂停派发（运行中跑完）；C# 以 active_count==0 作为整理前置。
@@ -374,6 +411,41 @@ pub unsafe extern "C" fn dlmgr_shutdown(mgr: *mut c_void) {
 
     curlw_share_cleanup(sh.share.0); // worker 已全部退出
     drop(Box::from_raw(mgr as *mut Arc<Shared>));
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// dlmgr_set_priority：排队中任务提权后先被派发；同级保持原 seq（FIFO）；
+    /// 重复改/未知 id 返回 false。
+    #[test]
+    fn set_priority_reorders_queue() {
+        let sh = Arc::new(Shared::new(1, 0, 0, std::ptr::null_mut()));
+        let mk = |id: u64| {
+            Arc::new(TaskShared::new(id, format!("t{id}"), "r".into(), String::new(), 1, 0, 0, 1))
+        };
+        {
+            let mut q = sh.queue.lock().unwrap();
+            // 入队顺序：低(1)、低(2)、高(3) —— 派发序应为 3、1、2
+            q.heap.push(HeapTask { priority: 0, seq: 0, task: mk(1) });
+            q.heap.push(HeapTask { priority: 0, seq: 1, task: mk(2) });
+            q.heap.push(HeapTask { priority: 5, seq: 2, task: mk(3) });
+        }
+
+        // 任务 1 提到最高：派发序变为 1、3、2
+        assert!(sh.set_priority(1, 10));
+        {
+            let mut q = sh.queue.lock().unwrap();
+            assert_eq!(q.heap.pop().unwrap().task.id, 1);
+            assert_eq!(q.heap.pop().unwrap().task.id, 3);
+            assert_eq!(q.heap.pop().unwrap().task.id, 2);
+        }
+
+        // 队列已空 → false；未知 id → false
+        assert!(!sh.set_priority(1, 99));
+        assert!(!sh.set_priority(42, 99));
+    }
 }
 
 /// dlmgr C ABI 版本。
